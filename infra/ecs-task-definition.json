@@ -1,0 +1,51 @@
+{
+  "family": "subscription-tracker-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "<account_id>.dkr.ecr.<region>.amazonaws.com/subscription-tracker-backend:latest",
+      "portMappings": [
+        {
+          "containerPort": 4000,
+          "hostPort": 4000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "4000"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "ap-south-1"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account_id>:secret:subscription_tracker_db_url-abc123"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:<region>:<account_id>:secret:subscription_tracker_jwt_secret-xyz789"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/subscription-tracker",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "backend"
+        }
+      }
+    }
+  ]
+}

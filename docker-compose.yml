@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: subspace-postgres
+    environment:
+      POSTGRES_DB: subscriptions
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d subscriptions"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: subspace-backend
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgres://admin:secret@postgres:5432/subscriptions
+      JWT_SECRET: your_jwt_secret
+      PORT: 4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: subspace-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
