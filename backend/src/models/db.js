@@ -2,8 +2,11 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
+const isProduction = process.env.DATABASE_URL?.includes('render.com');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
 });
 
 const bcrypt = require('bcryptjs');
