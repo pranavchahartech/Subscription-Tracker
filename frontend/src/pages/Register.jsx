@@ -1,128 +1,114 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, Wallet, Loader2, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Wallet, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 const Register = ({ onNavigateToLogin }) => {
   const { register } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password || !confirmPassword) {
-      return setError('Please fill in all fields');
-    }
-    if (password !== confirmPassword) {
-      return setError('Passwords do not match');
-    }
-    if (password.length < 6) {
-      return setError('Password must be at least 6 characters long');
-    }
+    if (!email || !password || !confirmPassword) return setError('Please fill in all fields');
+    if (password !== confirmPassword) return setError('Passwords do not match');
+    if (password.length < 6) return setError('Password must be at least 6 characters');
     setError('');
     setLoading(true);
     const result = await register(email, password);
     setLoading(false);
-    if (!result.success) {
-      setError(result.error);
-    }
+    if (!result.success) setError(result.error);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center relative overflow-hidden px-4">
-      {/* Decorative Orbs */}
-      <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-pink-600/20 rounded-full filter blur-[100px] animate-pulse" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/20 rounded-full filter blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
+    <div className="min-h-screen mesh-bg flex items-center justify-center relative overflow-hidden px-4">
+      <div className="absolute top-1/3 right-1/4 w-96 h-96 rounded-full pointer-events-none animate-spin-slow"
+        style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.14) 0%, transparent 70%)', filter: 'blur(45px)' }} />
+      <div className="absolute bottom-1/4 left-1/5 w-80 h-80 rounded-full pointer-events-none"
+        style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.16) 0%, transparent 70%)', filter: 'blur(50px)' }} />
 
-      <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-3xl p-8 shadow-2xl relative z-10">
+      <div className="w-full max-w-md glass-card p-8 shadow-2xl relative z-10 animate-fade-scale"
+        style={{ boxShadow: '0 0 60px rgba(6,182,212,0.1), 0 24px 48px rgba(0,0,0,0.4)' }}>
+
         <div className="flex flex-col items-center mb-8">
-          <div className="p-3 bg-gradient-to-tr from-pink-500 to-indigo-500 rounded-2xl shadow-xl shadow-pink-500/20 mb-4 animate-float">
-            <Wallet className="h-8 w-8 text-white" />
+          <div className="p-3.5 rounded-2xl mb-4 animate-float"
+            style={{ background: 'linear-gradient(135deg,#06b6d4,#7c3aed)', boxShadow: '0 8px 24px rgba(6,182,212,0.35)' }}>
+            <Wallet className="h-7 w-7 text-white" />
           </div>
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-indigo-400 bg-clip-text text-transparent">
-            Create an Account
-          </h2>
-          <p className="text-slate-400 text-sm mt-1">Get started with tracking your subscriptions</p>
+          <h2 className="text-2xl font-bold" style={{
+            background: 'linear-gradient(135deg,#06b6d4,#7c3aed)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
+          }}>Create Account</h2>
+          <p className="text-sm mt-1" style={{ color:'#64748b' }}>Start tracking your subscriptions today</p>
         </div>
 
         {error && (
-          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm rounded-xl p-3 mb-6 flex items-center gap-2">
+          <div className="text-sm rounded-xl p-3 mb-5 flex items-center gap-2 animate-slide-up"
+            style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.25)', color:'#fda4af' }}>
             <span className="font-semibold">Error:</span> {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Email Address</label>
+        <form onSubmit={handleSubmit} className="space-y-5 stagger-children">
+          <div className="animate-slide-up">
+            <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color:'#64748b' }}>
+              Email Address
+            </label>
             <div className="relative">
-              <Mail className="absolute left-4 top-3.5 h-5 w-5 text-slate-500" />
-              <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-pink-500 transition-colors"
-                required
-              />
+              <Mail className="absolute left-4 top-3.5 h-4 w-4" style={{ color:'#475569' }} />
+              <input type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)}
+                className="input-field w-full py-3 pl-11 pr-4 text-sm" style={{ color:'#e2eaf5' }} required />
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Password</label>
+          <div className="animate-slide-up">
+            <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color:'#64748b' }}>
+              Password
+            </label>
             <div className="relative">
-              <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-500" />
-              <input
-                type="password"
-                placeholder="Min. 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-pink-500 transition-colors"
-                required
-              />
+              <Lock className="absolute left-4 top-3.5 h-4 w-4" style={{ color:'#475569' }} />
+              <input type={showPass ? 'text' : 'password'} placeholder="Min. 6 characters" value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="input-field w-full py-3 pl-11 pr-11 text-sm" style={{ color:'#e2eaf5' }} required />
+              <button type="button" onClick={() => setShowPass(v => !v)}
+                className="absolute right-4 top-3.5" style={{ color:'#475569' }}>
+                {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Confirm Password</label>
+          <div className="animate-slide-up">
+            <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color:'#64748b' }}>
+              Confirm Password
+            </label>
             <div className="relative">
-              <Lock className="absolute left-4 top-3.5 h-5 w-5 text-slate-500" />
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-pink-500 transition-colors"
-                required
-              />
+              <Lock className="absolute left-4 top-3.5 h-4 w-4" style={{ color:'#475569' }} />
+              <input type={showPass ? 'text' : 'password'} placeholder="••••••••" value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                className="input-field w-full py-3 pl-11 pr-4 text-sm" style={{ color:'#e2eaf5' }} required />
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-pink-600 to-indigo-600 text-white rounded-xl py-3.5 font-semibold text-sm shadow-lg shadow-pink-600/20 hover:shadow-pink-600/30 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group cursor-pointer"
-          >
-            {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <>
-                Sign Up
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-              </>
+          <button type="submit" disabled={loading}
+            className="animate-slide-up w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: 'linear-gradient(135deg,#06b6d4,#7c3aed)', boxShadow: '0 8px 24px rgba(6,182,212,0.25)' }}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+              <>Create Account <ArrowRight className="h-4 w-4" /></>
             )}
           </button>
         </form>
 
-        <div className="mt-8 text-center border-t border-slate-800/60 pt-6">
-          <p className="text-slate-400 text-sm">
+        <div className="mt-7 text-center pt-6" style={{ borderTop: '1px solid rgba(30,58,95,0.5)' }}>
+          <p className="text-sm" style={{ color:'#475569' }}>
             Already have an account?{' '}
-            <button
-              onClick={onNavigateToLogin}
-              className="text-pink-400 font-semibold hover:text-pink-300 transition-colors cursor-pointer"
-            >
-              Sign in here
+            <button onClick={onNavigateToLogin} className="font-semibold transition-colors"
+              style={{ color:'#7c3aed' }}
+              onMouseEnter={e => e.currentTarget.style.color='#06b6d4'}
+              onMouseLeave={e => e.currentTarget.style.color='#7c3aed'}>
+              Sign in
             </button>
           </p>
         </div>

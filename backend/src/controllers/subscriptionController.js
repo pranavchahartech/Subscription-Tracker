@@ -1,4 +1,5 @@
 const db = require('../models/db');
+const logger = require('../utils/logger');
 
 // Helper to determine subscription status
 const getSubscriptionStatus = (sub) => {
@@ -44,7 +45,7 @@ const getSubscriptions = async (req, res) => {
 
     res.json(subscriptions);
   } catch (err) {
-    console.error('Error fetching subscriptions:', err);
+    logger.error({ err }, 'Error fetching subscriptions');
     res.status(500).json({ error: 'Server error while fetching subscriptions' });
   }
 };
@@ -82,7 +83,7 @@ const createSubscription = async (req, res) => {
       status: getSubscriptionStatus(sub)
     });
   } catch (err) {
-    console.error('Error creating subscription:', err);
+    logger.error({ err }, 'Error creating subscription');
     res.status(500).json({ error: 'Server error while creating subscription' });
   }
 };
@@ -132,7 +133,7 @@ const updateSubscription = async (req, res) => {
       status: getSubscriptionStatus(sub)
     });
   } catch (err) {
-    console.error('Error updating subscription:', err);
+    logger.error({ err }, 'Error updating subscription');
     res.status(500).json({ error: 'Server error while updating subscription' });
   }
 };
@@ -152,7 +153,7 @@ const deleteSubscription = async (req, res) => {
 
     res.json({ message: 'Subscription deleted successfully', id: result.rows[0].id });
   } catch (err) {
-    console.error('Error deleting subscription:', err);
+    logger.error({ err }, 'Error deleting subscription');
     res.status(500).json({ error: 'Server error while deleting subscription' });
   }
 };
@@ -219,8 +220,37 @@ const getSummary = async (req, res) => {
       categoryBreakdown
     });
   } catch (err) {
-    console.error('Error generating summary:', err);
+    logger.error({ err }, 'Error generating summary');
     res.status(500).json({ error: 'Server error while generating summary' });
+  }
+};
+
+const exportCsv = async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY next_renewal ASC',
+      [req.userId]
+    );
+    const headers = ['Name','Cost','Currency','Billing Cycle','Category','Start Date','Next Renewal','Last Used','Active','Status'];
+    const rows = result.rows.map(sub => [
+      `"${sub.name.replace(/"/g,'""')}"`,
+      parseFloat(sub.cost).toFixed(2),
+      sub.currency,
+      sub.billing_cycle,
+      sub.category,
+      sub.start_date ? sub.start_date.split('T')[0] : '',
+      sub.next_renewal ? sub.next_renewal.split('T')[0] : '',
+      sub.last_used_date ? sub.last_used_date.split('T')[0] : '',
+      sub.is_active ? 'Yes' : 'No',
+      getSubscriptionStatus(sub)
+    ].join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="subspace-subscriptions.csv"');
+    res.send(csv);
+  } catch (err) {
+    logger.error({ err }, 'Error exporting CSV');
+    res.status(500).json({ error: 'Server error while exporting CSV' });
   }
 };
 
@@ -229,5 +259,6 @@ module.exports = {
   createSubscription,
   updateSubscription,
   deleteSubscription,
-  getSummary
+  getSummary,
+  exportCsv
 };

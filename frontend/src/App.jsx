@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Subscriptions from './pages/Subscriptions';
 import Reminders from './pages/Reminders';
@@ -29,7 +30,15 @@ function AppContent() {
     if (authScreen === 'register') {
       return <Register onNavigateToLogin={() => setAuthScreen('login')} />;
     }
-    return <Login onNavigateToRegister={() => setAuthScreen('register')} />;
+    if (authScreen === 'forgot-password') {
+      return <ForgotPassword onNavigateToLogin={() => setAuthScreen('login')} />;
+    }
+    return (
+      <Login 
+        onNavigateToRegister={() => setAuthScreen('register')} 
+        onNavigateToForgotPassword={() => setAuthScreen('forgot-password')} 
+      />
+    );
   }
 
   // Authenticated workspace shell

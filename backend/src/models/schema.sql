@@ -27,3 +27,18 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 -- Index for renewal job lookups
 CREATE INDEX IF NOT EXISTS idx_subscriptions_renewal ON subscriptions(next_renewal, is_active);
+
+-- Table for tracking password resets
+CREATE TABLE IF NOT EXISTS password_resets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  attempts INT DEFAULT 0,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for password resets lookup
+CREATE INDEX IF NOT EXISTS idx_password_resets_email ON password_resets(email, used);
+

@@ -1,32 +1,39 @@
 import React from 'react';
-import { LayoutDashboard, CreditCard, Bell, LogOut, Wallet } from 'lucide-react';
+import { LayoutDashboard, CreditCard, Bell, LogOut, Wallet, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+
+const navItems = [
+  { id: 'dashboard',     name: 'Dashboard',     icon: LayoutDashboard },
+  { id: 'subscriptions', name: 'Subscriptions', icon: CreditCard },
+  { id: 'reminders',    name: 'Reminders',     icon: Bell },
+];
 
 const Navigation = ({ currentPage, setCurrentPage }) => {
   const { user, logout } = useAuth();
-
-  const navItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
-    { id: 'subscriptions', name: 'Subscriptions', icon: CreditCard },
-    { id: 'reminders', name: 'Reminders', icon: Bell },
-  ];
+  const initial = user?.email?.charAt(0).toUpperCase() || 'U';
 
   return (
-    <aside className="w-64 bg-slate-900/80 backdrop-blur-xl border-r border-slate-800/60 flex flex-col justify-between h-screen sticky top-0">
+    <aside className="w-64 flex-shrink-0 flex flex-col justify-between h-screen sticky top-0 border-r"
+      style={{ background: 'linear-gradient(180deg,#0d1526 0%,#080c14 100%)', borderColor: 'rgba(30,58,95,0.55)' }}>
+
+      {/* Logo */}
       <div className="p-6">
         <div className="flex items-center gap-3 mb-10">
-          <div className="p-2 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-xl shadow-lg shadow-indigo-500/20">
-            <Wallet className="h-6 w-6 text-white" />
+          <div className="relative">
+            <div className="p-2.5 rounded-xl animate-glow-pulse"
+              style={{ background: 'linear-gradient(135deg,#7c3aed,#06b6d4)' }}>
+              <Wallet className="h-5 w-5 text-white" />
+            </div>
+            <Zap className="h-3 w-3 text-amber-400 absolute -top-1 -right-1 animate-bounce" />
           </div>
           <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              SubSpace
-            </h1>
-            <span className="text-[10px] text-slate-500 font-mono tracking-wider">TRACKER v1.0</span>
+            <h1 className="text-lg font-bold gradient-text tracking-tight">SubSpace</h1>
+            <span className="text-[10px] font-mono tracking-widest" style={{ color:'#334155' }}>TRACKER v2.0</span>
           </div>
         </div>
 
-        <nav className="space-y-1.5">
+        {/* Nav Items */}
+        <nav className="space-y-1 stagger-children">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
@@ -34,16 +41,29 @@ const Navigation = ({ currentPage, setCurrentPage }) => {
               <button
                 key={item.id}
                 onClick={() => setCurrentPage(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 group relative animate-slide-up ${
                   isActive
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/10'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                    ? 'text-white'
+                    : 'text-slate-400 hover:text-white'
                 }`}
+                style={isActive ? {
+                  background: 'linear-gradient(135deg,rgba(124,58,237,0.25),rgba(6,182,212,0.15))',
+                  borderColor: 'rgba(124,58,237,0.4)',
+                  border: '1px solid rgba(124,58,237,0.4)',
+                } : {}}
               >
-                <Icon className={`h-5 w-5 transition-transform duration-300 group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-indigo-400'}`} />
-                <span className="font-medium text-sm">{item.name}</span>
+                {/* Active glow dot */}
                 {isActive && (
-                  <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-r-full"
+                    style={{ background: 'linear-gradient(180deg,#7c3aed,#06b6d4)' }} />
+                )}
+                <Icon className={`h-4.5 w-4.5 transition-all duration-300 ${
+                  isActive ? 'text-violet-400' : 'text-slate-500 group-hover:text-violet-400 group-hover:scale-110'
+                }`} style={{ height: '1.125rem', width: '1.125rem' }} />
+                <span>{item.name}</span>
+                {isActive && (
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full animate-pulse"
+                    style={{ background: 'linear-gradient(135deg,#7c3aed,#06b6d4)' }} />
                 )}
               </button>
             );
@@ -51,23 +71,37 @@ const Navigation = ({ currentPage, setCurrentPage }) => {
         </nav>
       </div>
 
-      <div className="p-6 border-t border-slate-800/50">
-        <div className="flex items-center gap-3 mb-5 p-2 rounded-lg bg-slate-950/40 border border-slate-800/30">
-          <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-500 to-pink-500 flex items-center justify-center text-white font-bold font-mono text-sm">
-            {user?.email?.charAt(0).toUpperCase() || 'U'}
+      {/* User + Logout */}
+      <div className="p-5 border-t" style={{ borderColor: 'rgba(30,58,95,0.55)' }}>
+        <div className="flex items-center gap-3 mb-4 p-3 rounded-xl"
+          style={{ background: 'rgba(13,21,38,0.6)', border: '1px solid rgba(30,58,95,0.4)' }}>
+          <div className="h-9 w-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#7c3aed,#06b6d4)' }}>
+            {initial}
           </div>
-          <div className="overflow-hidden">
-            <p className="text-xs font-semibold text-slate-200 truncate">{user?.email}</p>
-            <p className="text-[10px] text-slate-500">Premium Account</p>
+          <div className="overflow-hidden flex-1 min-w-0">
+            <p className="text-xs font-semibold truncate" style={{ color: '#e2eaf5' }}>{user?.email}</p>
+            <p className="text-[10px] font-mono" style={{ color: '#334155' }}>Pro Account</p>
           </div>
         </div>
 
         <button
           onClick={logout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all duration-300 font-medium text-sm group"
+          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 group"
+          style={{ color: '#64748b', border: '1px solid transparent' }}
+          onMouseEnter={e => {
+            e.currentTarget.style.color = '#f43f5e';
+            e.currentTarget.style.background = 'rgba(244,63,94,0.08)';
+            e.currentTarget.style.borderColor = 'rgba(244,63,94,0.2)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.color = '#64748b';
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.borderColor = 'transparent';
+          }}
         >
-          <LogOut className="h-5 w-5 group-hover:translate-x-0.5 transition-transform duration-300" />
-          Log Out
+          <LogOut className="h-4 w-4 group-hover:translate-x-0.5 transition-transform duration-300" />
+          Sign Out
         </button>
       </div>
     </aside>

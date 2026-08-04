@@ -6,6 +6,7 @@ const { authenticateToken } = require('../middleware/auth');
 router.use(authenticateToken);
 
 router.get('/summary', subscriptionController.getSummary);
+router.get('/export/csv', subscriptionController.exportCsv);
 router.get('/', subscriptionController.getSubscriptions);
 router.post('/', subscriptionController.createSubscription);
 router.put('/:id', subscriptionController.updateSubscription);

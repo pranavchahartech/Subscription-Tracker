@@ -24,6 +24,11 @@ services:
     environment:
       DATABASE_URL: postgres://admin:secret@postgres:5432/subscriptions
       JWT_SECRET: your_jwt_secret
+      JWT_RESET_SECRET: your_jwt_reset_secret
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: your_smtp_user@gmail.com
+      SMTP_PASS: your_smtp_password
       PORT: 4000
     depends_on:
       postgres:

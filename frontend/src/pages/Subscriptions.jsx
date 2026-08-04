@@ -1,530 +1,364 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import client from '../api/client';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Edit2, 
-  Trash2, 
-  AlertCircle, 
-  Loader2, 
-  X, 
-  Calendar, 
-  Check, 
-  AlertTriangle 
-} from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Trash2, AlertCircle, Loader2, X, Calendar, Check, AlertTriangle, Download } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-const CATEGORIES = ['Entertainment', 'Utilities', 'Software', 'Health & Fitness', 'Business', 'Other'];
-const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP'];
+const CATEGORIES = ['Entertainment','Utilities','Software','Health & Fitness','Business','Other'];
+const CURRENCIES = ['INR','USD','EUR','GBP'];
+
+const getStatusStyle = (status) => {
+  const map = {
+    Active:   { bg:'rgba(16,185,129,0.12)',  border:'rgba(16,185,129,0.3)',  color:'#10b981' },
+    Unused:   { bg:'rgba(245,158,11,0.12)',  border:'rgba(245,158,11,0.3)',  color:'#f59e0b' },
+    Review:   { bg:'rgba(124,58,237,0.12)',  border:'rgba(124,58,237,0.3)',  color:'#a78bfa' },
+    Inactive: { bg:'rgba(100,116,139,0.12)', border:'rgba(100,116,139,0.3)', color:'#64748b' },
+  };
+  return map[status] || map.Inactive;
+};
+
+const SkeletonRow = () => (
+  <tr>
+    {[...Array(7)].map((_, i) => (
+      <td key={i} className="p-4 pl-6"><div className="skeleton h-4 w-full" style={{ animationDelay: `${i * 60}ms` }} /></td>
+    ))}
+  </tr>
+);
 
 const Subscriptions = () => {
+  const { token } = useAuth();
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Search & Filter State
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
-
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [subToDelete, setSubToDelete] = useState(null);
-
-  // Form State
   const [formData, setFormData] = useState({
-    name: '',
-    cost: '',
-    currency: 'INR',
-    billing_cycle: 'monthly',
-    category: 'Entertainment',
-    start_date: '',
-    next_renewal: '',
-    last_used_date: '',
-    is_active: true
+    name:'', cost:'', currency:'INR', billing_cycle:'monthly',
+    category:'Entertainment', start_date:'', next_renewal:'', last_used_date:'', is_active:true
   });
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [csvLoading, setCsvLoading] = useState(false);
 
   const fetchSubscriptions = async () => {
-    try {
-      setLoading(true);
-      const res = await client.get('/api/subscriptions');
-      setSubscriptions(res.data);
-    } catch (err) {
-      console.error('Error fetching subscriptions:', err);
-      setError('Failed to fetch subscriptions.');
-    } finally {
-      setLoading(false);
-    }
+    try { setLoading(true); const res = await client.get('/api/subscriptions'); setSubscriptions(res.data); }
+    catch { setError('Failed to fetch subscriptions.'); }
+    finally { setLoading(false); }
   };
-
-  useEffect(() => {
-    fetchSubscriptions();
-  }, []);
+  useEffect(() => { fetchSubscriptions(); }, []);
 
   const handleOpenAddModal = () => {
     setEditingSub(null);
-    setFormData({
-      name: '',
-      cost: '',
-      currency: 'INR',
-      billing_cycle: 'monthly',
-      category: 'Entertainment',
-      start_date: new Date().toISOString().split('T')[0],
-      next_renewal: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days later
-      last_used_date: new Date().toISOString().split('T')[0],
-      is_active: true
-    });
-    setFormError('');
-    setIsModalOpen(true);
+    const today = new Date().toISOString().split('T')[0];
+    const in30 = new Date(Date.now() + 30*86400000).toISOString().split('T')[0];
+    setFormData({ name:'', cost:'', currency:'INR', billing_cycle:'monthly', category:'Entertainment', start_date:today, next_renewal:in30, last_used_date:today, is_active:true });
+    setFormError(''); setIsModalOpen(true);
   };
-
   const handleOpenEditModal = (sub) => {
     setEditingSub(sub);
-    setFormData({
-      name: sub.name,
-      cost: sub.cost,
-      currency: sub.currency,
-      billing_cycle: sub.billing_cycle,
-      category: sub.category,
-      start_date: sub.start_date ? sub.start_date.split('T')[0] : '',
-      next_renewal: sub.next_renewal ? sub.next_renewal.split('T')[0] : '',
-      last_used_date: sub.last_used_date ? sub.last_used_date.split('T')[0] : '',
-      is_active: sub.is_active
-    });
-    setFormError('');
-    setIsModalOpen(true);
+    setFormData({ name:sub.name, cost:sub.cost, currency:sub.currency, billing_cycle:sub.billing_cycle,
+      category:sub.category, start_date:sub.start_date?.split('T')[0]||'',
+      next_renewal:sub.next_renewal?.split('T')[0]||'',
+      last_used_date:sub.last_used_date?.split('T')[0]||'', is_active:sub.is_active });
+    setFormError(''); setIsModalOpen(true);
   };
-
-  const handleOpenDeleteConfirm = (sub) => {
-    setSubToDelete(sub);
-    setIsDeleteConfirmOpen(true);
-  };
-
   const handleFormChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+    setFormData(p => ({ ...p, [name]: type==='checkbox' ? checked : value }));
   };
-
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.cost || !formData.start_date || !formData.next_renewal) {
+    if (!formData.name || !formData.cost || !formData.start_date || !formData.next_renewal)
       return setFormError('Please fill in all required fields.');
-    }
-    if (parseFloat(formData.cost) <= 0) {
-      return setFormError('Cost must be greater than zero.');
-    }
-
+    if (parseFloat(formData.cost) <= 0) return setFormError('Cost must be greater than zero.');
     try {
-      setFormSubmitting(true);
-      setFormError('');
-      
-      const parsedData = {
-        ...formData,
-        cost: parseFloat(formData.cost),
-        last_used_date: formData.last_used_date || null
-      };
-
-      if (editingSub) {
-        await client.put(`/api/subscriptions/${editingSub.id}`, parsedData);
-      } else {
-        await client.post('/api/subscriptions', parsedData);
-      }
-
-      setIsModalOpen(false);
-      fetchSubscriptions();
+      setFormSubmitting(true); setFormError('');
+      const data = { ...formData, cost: parseFloat(formData.cost), last_used_date: formData.last_used_date||null };
+      editingSub ? await client.put(`/api/subscriptions/${editingSub.id}`, data) : await client.post('/api/subscriptions', data);
+      setIsModalOpen(false); fetchSubscriptions();
     } catch (err) {
-      console.error('Error saving subscription:', err);
       setFormError(err.response?.data?.error || 'Error saving subscription.');
-    } finally {
-      setFormSubmitting(false);
-    }
+    } finally { setFormSubmitting(false); }
   };
-
   const handleDelete = async () => {
+    if (!subToDelete) return;
+    setLoading(true);
+    try { await client.delete(`/api/subscriptions/${subToDelete.id}`); setIsDeleteConfirmOpen(false); setSubToDelete(null); fetchSubscriptions(); }
+    catch { setError('Failed to delete subscription.'); setLoading(false); }
+  };
+  const handleExportCsv = async () => {
+    setCsvLoading(true);
     try {
-      if (!subToDelete) return;
-      setLoading(true);
-      await client.delete(`/api/subscriptions/${subToDelete.id}`);
-      setIsDeleteConfirmOpen(false);
-      setSubToDelete(null);
-      fetchSubscriptions();
-    } catch (err) {
-      console.error('Error deleting subscription:', err);
-      setError('Failed to delete subscription.');
-      setLoading(false);
-    }
+      const res = await client.get('/api/subscriptions/export/csv', { responseType:'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type:'text/csv' }));
+      const a = document.createElement('a'); a.href = url; a.download = 'subspace-subscriptions.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch { setError('Failed to export CSV.'); }
+    finally { setCsvLoading(false); }
   };
 
-  // Filter and search logic
-  const filteredSubs = subscriptions.filter(sub => {
-    const matchesSearch = sub.name.toLowerCase().includes(search.toLowerCase()) || 
-                          sub.category.toLowerCase().includes(search.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'All' || sub.status === statusFilter;
-    const matchesCategory = categoryFilter === 'All' || sub.category === categoryFilter;
-
-    return matchesSearch && matchesStatus && matchesCategory;
+  const filtered = subscriptions.filter(s => {
+    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.category.toLowerCase().includes(search.toLowerCase());
+    return matchSearch && (statusFilter==='All'||s.status===statusFilter) && (categoryFilter==='All'||s.category===categoryFilter);
   });
 
-  const getStatusBadgeStyle = (status) => {
-    switch (status) {
-      case 'Active':
-        return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
-      case 'Unused':
-        return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
-      case 'Review':
-        return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
-      case 'Inactive':
-        return 'bg-slate-500/10 text-slate-400 border border-slate-500/20';
-      default:
-        return 'bg-slate-500/10 text-slate-400 border border-slate-500/20';
-    }
-  };
-
   return (
-    <div className="p-8 bg-slate-950 text-slate-200 min-h-screen">
+    <div className="p-8 mesh-bg min-h-screen page-enter" style={{ color:'#e2eaf5' }}>
       {/* Header */}
-      <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <header className="mb-7 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-            Your Subscriptions
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">Manage and audit all recurring payments</p>
+          <h1 className="text-3xl font-extrabold gradient-text">Your Subscriptions</h1>
+          <p className="text-sm mt-1" style={{ color:'#475569' }}>Manage and audit all recurring payments</p>
         </div>
-        <button 
-          onClick={handleOpenAddModal}
-          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl font-semibold text-sm transition-all duration-300 shadow-lg shadow-indigo-600/10 active:scale-[0.98] cursor-pointer"
-        >
-          <Plus className="h-5 w-5" />
-          Add Subscription
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleExportCsv} disabled={csvLoading}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:opacity-50"
+            style={{ background:'rgba(16,185,129,0.12)', border:'1px solid rgba(16,185,129,0.3)', color:'#10b981' }}
+            onMouseEnter={e => e.currentTarget.style.background='rgba(16,185,129,0.2)'}
+            onMouseLeave={e => e.currentTarget.style.background='rgba(16,185,129,0.12)'}>
+            {csvLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Export CSV
+          </button>
+          <button onClick={handleOpenAddModal} className="btn-primary flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Add Subscription
+          </button>
+        </div>
       </header>
 
-      {/* Search & Filter Toolbar */}
-      <section className="bg-slate-900/40 border border-slate-800/60 rounded-2xl p-4 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
-        {/* Search */}
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search subscriptions or category..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-          />
+      {/* Search & Filters */}
+      <section className="glass-card p-4 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full md:w-72">
+          <Search className="absolute left-3.5 top-3 h-4 w-4" style={{ color:'#475569' }} />
+          <input type="text" placeholder="Search name or category…" value={search} onChange={e => setSearch(e.target.value)}
+            className="input-field w-full py-2.5 pl-10 pr-4 text-sm" style={{ color:'#e2eaf5', borderRadius:'0.75rem' }} />
         </div>
-
-        {/* Filters */}
         <div className="flex flex-wrap gap-3 w-full md:w-auto">
-          {/* Status filter */}
-          <div className="flex items-center gap-2 bg-slate-950/40 border border-slate-800/80 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-400">
-            <Filter className="h-3.5 w-3.5" />
-            <span>Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent text-slate-200 font-medium outline-none cursor-pointer focus:text-indigo-400"
-            >
-              <option value="All">All</option>
-              <option value="Active">Active</option>
-              <option value="Unused">Unused</option>
-              <option value="Review">Review</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-
-          {/* Category filter */}
-          <div className="flex items-center gap-2 bg-slate-950/40 border border-slate-800/80 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-400">
-            <Filter className="h-3.5 w-3.5" />
-            <span>Category:</span>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="bg-transparent text-slate-200 font-medium outline-none cursor-pointer focus:text-indigo-400"
-            >
-              <option value="All">All</option>
-              {CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
+          {[['Status', statusFilter, setStatusFilter, ['All','Active','Unused','Review','Inactive']],
+            ['Category', categoryFilter, setCategoryFilter, ['All',...CATEGORIES]]].map(([label, val, setter, opts]) => (
+            <div key={label} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold"
+              style={{ background:'rgba(13,21,38,0.6)', border:'1px solid rgba(30,58,95,0.6)', color:'#64748b' }}>
+              <Filter className="h-3.5 w-3.5" />
+              <span>{label}:</span>
+              <select value={val} onChange={e => setter(e.target.value)}
+                className="bg-transparent font-medium outline-none cursor-pointer" style={{ color:'#e2eaf5' }}>
+                {opts.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* Error banner */}
       {error && (
-        <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm rounded-xl p-4 mb-6 flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-rose-400 flex-shrink-0" />
-          <span>{error}</span>
+        <div className="text-sm rounded-xl p-4 mb-5 flex items-center gap-2"
+          style={{ background:'rgba(244,63,94,0.08)', border:'1px solid rgba(244,63,94,0.25)', color:'#fda4af' }}>
+          <AlertCircle className="h-4 w-4 flex-shrink-0" /> {error}
         </div>
       )}
 
-      {/* Main List Table */}
+      {/* Table */}
       {loading ? (
-        <div className="h-64 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-        </div>
-      ) : filteredSubs.length > 0 ? (
-        <div className="bg-slate-900/30 border border-slate-800/50 rounded-3xl overflow-hidden shadow-xl">
+        <div className="glass-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-800/80 bg-slate-900/40">
-                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider pl-6">Subscription</th>
-                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Cost</th>
-                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Billing Cycle</th>
-                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Category</th>
-                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Next Renewal</th>
-                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                  <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right pr-6">Actions</th>
+            <table className="w-full text-left">
+              <thead style={{ borderBottom:'1px solid rgba(30,58,95,0.6)' }}>
+                <tr>
+                  {['Subscription','Cost','Billing Cycle','Category','Next Renewal','Status','Actions'].map(h => (
+                    <th key={h} className="p-4 text-xs font-bold uppercase tracking-wider pl-6" style={{ color:'#475569' }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/40">
-                {filteredSubs.map((sub) => (
-                  <tr key={sub.id} className="hover:bg-slate-900/20 transition-colors group">
-                    <td className="p-4 pl-6">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-lg bg-slate-800 flex items-center justify-center font-bold text-slate-300 border border-slate-700/30">
-                          {sub.name.charAt(0).toUpperCase()}
+              <tbody>
+                {[...Array(4)].map((_, i) => <SkeletonRow key={i} />)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : filtered.length > 0 ? (
+        <div className="glass-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead style={{ borderBottom:'1px solid rgba(30,58,95,0.6)', background:'rgba(13,21,38,0.6)' }}>
+                <tr>
+                  {['Subscription','Cost','Billing','Category','Next Renewal','Status','Actions'].map(h => (
+                    <th key={h} className="p-4 text-xs font-bold uppercase tracking-wider pl-6" style={{ color:'#475569' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((sub, idx) => {
+                  const st = getStatusStyle(sub.status);
+                  return (
+                    <tr key={sub.id} className="group transition-all duration-200 animate-slide-up"
+                      style={{ borderBottom:'1px solid rgba(30,58,95,0.3)', animationDelay:`${idx*40}ms` }}
+                      onMouseEnter={e => e.currentTarget.style.background='rgba(124,58,237,0.04)'}
+                      onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                      <td className="p-4 pl-6">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0"
+                            style={{ background:'linear-gradient(135deg,rgba(124,58,237,0.3),rgba(6,182,212,0.2))', border:'1px solid rgba(124,58,237,0.2)', color:'#a78bfa' }}>
+                            {sub.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm" style={{ color:'#e2eaf5' }}>{sub.name}</p>
+                            <p className="text-[10px] font-mono" style={{ color:'#475569' }}>
+                              Since {new Date(sub.start_date).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-bold text-white text-sm">{sub.name}</p>
-                          <p className="text-[10px] text-slate-500 font-mono">Started: {new Date(sub.start_date).toLocaleDateString()}</p>
+                      </td>
+                      <td className="p-4 font-bold text-sm" style={{ color:'#e2eaf5' }}>
+                        {sub.currency === 'INR' ? '₹' : sub.currency}{parseFloat(sub.cost).toFixed(2)}
+                      </td>
+                      <td className="p-4 text-xs font-medium capitalize" style={{ color:'#94a3b8' }}>{sub.billing_cycle}</td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-semibold"
+                          style={{ background:'rgba(30,58,95,0.4)', border:'1px solid rgba(30,58,95,0.6)', color:'#94a3b8' }}>
+                          {sub.category}
+                        </span>
+                      </td>
+                      <td className="p-4 text-xs font-medium" style={{ color:'#94a3b8' }}>
+                        {new Date(sub.next_renewal).toLocaleDateString()}
+                      </td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide"
+                          style={{ background:st.bg, border:`1px solid ${st.border}`, color:st.color }}>
+                          {sub.status}
+                        </span>
+                      </td>
+                      <td className="p-4 pr-6">
+                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <button onClick={() => handleOpenEditModal(sub)} title="Edit"
+                            className="p-1.5 rounded-lg transition-all duration-200"
+                            style={{ border:'1px solid rgba(30,58,95,0.6)', color:'#475569' }}
+                            onMouseEnter={e => { e.currentTarget.style.background='rgba(124,58,237,0.15)'; e.currentTarget.style.color='#a78bfa'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#475569'; }}>
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => { setSubToDelete(sub); setIsDeleteConfirmOpen(true); }} title="Delete"
+                            className="p-1.5 rounded-lg transition-all duration-200"
+                            style={{ border:'1px solid rgba(30,58,95,0.6)', color:'#475569' }}
+                            onMouseEnter={e => { e.currentTarget.style.background='rgba(244,63,94,0.15)'; e.currentTarget.style.color='#f43f5e'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#475569'; }}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td className="p-4 font-bold text-white text-sm">
-                      {sub.currency === 'INR' ? '₹' : sub.currency} {parseFloat(sub.cost).toFixed(2)}
-                    </td>
-                    <td className="p-4">
-                      <span className="text-xs font-medium text-slate-300 capitalize">{sub.billing_cycle}</span>
-                    </td>
-                    <td className="p-4">
-                      <span className="px-2.5 py-1 bg-slate-850 border border-slate-800 text-slate-400 rounded-full text-xs font-medium">
-                        {sub.category}
-                      </span>
-                    </td>
-                    <td className="p-4 text-xs font-medium text-slate-300">
-                      {new Date(sub.next_renewal).toLocaleDateString()}
-                    </td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase ${getStatusBadgeStyle(sub.status)}`}>
-                        {sub.status}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right pr-6">
-                      <div className="flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => handleOpenEditModal(sub)}
-                          className="p-1.5 bg-slate-850 hover:bg-indigo-500/10 hover:text-indigo-400 border border-slate-800 rounded-lg text-slate-400 transition-all cursor-pointer"
-                          title="Edit"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleOpenDeleteConfirm(sub)}
-                          className="p-1.5 bg-slate-850 hover:bg-rose-500/10 hover:text-rose-400 border border-slate-800 rounded-lg text-slate-400 transition-all cursor-pointer"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       ) : (
-        <div className="h-64 flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-3xl p-8 bg-slate-900/10">
-          <p className="text-slate-400 text-sm font-medium mb-1">No matching subscriptions found</p>
-          <p className="text-slate-500 text-xs text-center max-w-[280px]">
-            Try resetting your search query or add a new recurring subscription.
-          </p>
+        <div className="h-64 flex flex-col items-center justify-center rounded-3xl"
+          style={{ border:'1px dashed rgba(30,58,95,0.6)' }}>
+          <p className="text-sm font-medium" style={{ color:'#475569' }}>No matching subscriptions</p>
+          <p className="text-xs mt-1" style={{ color:'#334155' }}>Try adjusting your filters or add a new subscription.</p>
         </div>
       )}
 
-      {/* Add / Edit Subscription Modal */}
+      {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative">
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="absolute right-4 top-4 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-850 transition-colors"
-            >
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background:'rgba(8,12,20,0.85)', backdropFilter:'blur(12px)' }}>
+          <div className="w-full max-w-lg glass-card p-7 shadow-2xl relative animate-fade-scale"
+            style={{ boxShadow:'0 0 60px rgba(124,58,237,0.15), 0 24px 48px rgba(0,0,0,0.5)' }}>
+            <button onClick={() => setIsModalOpen(false)}
+              className="absolute right-5 top-5 p-1.5 rounded-lg transition-colors" style={{ color:'#475569' }}
+              onMouseEnter={e => e.currentTarget.style.color='#e2eaf5'}
+              onMouseLeave={e => e.currentTarget.style.color='#475569'}>
               <X className="h-5 w-5" />
             </button>
-
-            <h3 className="text-xl font-bold mb-4 bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            <h3 className="text-xl font-bold mb-5 gradient-text">
               {editingSub ? 'Edit Subscription' : 'New Subscription'}
             </h3>
-
             {formError && (
-              <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs rounded-xl p-3 mb-4 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-rose-400 flex-shrink-0" />
-                <span>{formError}</span>
+              <div className="text-xs rounded-xl p-3 mb-4 animate-slide-up"
+                style={{ background:'rgba(244,63,94,0.08)', border:'1px solid rgba(244,63,94,0.25)', color:'#fda4af' }}>
+                {formError}
               </div>
             )}
-
             <form onSubmit={handleFormSubmit} className="space-y-4">
-              {/* Name */}
               <div>
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Subscription Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  placeholder="e.g. Netflix, AWS, Spotify"
-                  value={formData.name}
-                  onChange={handleFormChange}
-                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 px-4 text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500 text-sm transition-colors"
-                />
+                <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color:'#64748b' }}>
+                  Subscription Name *
+                </label>
+                <input type="text" name="name" required placeholder="e.g. Netflix, AWS, Spotify"
+                  value={formData.name} onChange={handleFormChange}
+                  className="input-field w-full py-2.5 px-4 text-sm" style={{ color:'#e2eaf5' }} />
               </div>
-
-              {/* Cost & Currency */}
+              <div className="grid grid-cols-2 gap-4">
+                {[['Cost *','cost','number','299.00'],['Billing Cycle','billing_cycle','select',null],
+                ].map(([lbl, name, type, ph]) => (
+                  <div key={name}>
+                    <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color:'#64748b' }}>{lbl}</label>
+                    {type === 'select' ? (
+                      <select name={name} value={formData[name]} onChange={handleFormChange}
+                        className="input-field w-full py-2.5 px-4 text-sm" style={{ color:'#e2eaf5' }}>
+                        <option value="monthly">Monthly</option>
+                        <option value="annual">Annual</option>
+                      </select>
+                    ) : (
+                      <input type={type} name={name} required step="0.01" min="0.01" placeholder={ph}
+                        value={formData[name]} onChange={handleFormChange}
+                        className="input-field w-full py-2.5 px-4 text-sm" style={{ color:'#e2eaf5' }} />
+                    )}
+                  </div>
+                ))}
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Cost *</label>
-                  <input
-                    type="number"
-                    name="cost"
-                    required
-                    step="0.01"
-                    min="0.01"
-                    placeholder="299.00"
-                    value={formData.cost}
-                    onChange={handleFormChange}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 px-4 text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500 text-sm transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Currency</label>
-                  <select
-                    name="currency"
-                    value={formData.currency}
-                    onChange={handleFormChange}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 px-4 text-slate-200 focus:outline-none focus:border-indigo-500 text-sm transition-colors"
-                  >
-                    {CURRENCIES.map(curr => (
-                      <option key={curr} value={curr}>{curr}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Billing Cycle & Category */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Billing Cycle</label>
-                  <select
-                    name="billing_cycle"
-                    value={formData.billing_cycle}
-                    onChange={handleFormChange}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 px-4 text-slate-200 focus:outline-none focus:border-indigo-500 text-sm transition-colors"
-                  >
-                    <option value="monthly">Monthly</option>
-                    <option value="annual">Annual</option>
+                  <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color:'#64748b' }}>Currency</label>
+                  <select name="currency" value={formData.currency} onChange={handleFormChange}
+                    className="input-field w-full py-2.5 px-4 text-sm" style={{ color:'#e2eaf5' }}>
+                    {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Category</label>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleFormChange}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 px-4 text-slate-200 focus:outline-none focus:border-indigo-500 text-sm transition-colors"
-                  >
-                    {CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
+                  <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color:'#64748b' }}>Category</label>
+                  <select name="category" value={formData.category} onChange={handleFormChange}
+                    className="input-field w-full py-2.5 px-4 text-sm" style={{ color:'#e2eaf5' }}>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
-
-              {/* Start Date & Next Renewal */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Start Date *</label>
-                  <input
-                    type="date"
-                    name="start_date"
-                    required
-                    value={formData.start_date}
-                    onChange={handleFormChange}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 px-4 text-slate-200 focus:outline-none focus:border-indigo-500 text-sm transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Next Renewal *</label>
-                  <input
-                    type="date"
-                    name="next_renewal"
-                    required
-                    value={formData.next_renewal}
-                    onChange={handleFormChange}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 px-4 text-slate-200 focus:outline-none focus:border-indigo-500 text-sm transition-colors"
-                  />
-                </div>
+                {[['Start Date *','start_date'],['Next Renewal *','next_renewal']].map(([lbl, name]) => (
+                  <div key={name}>
+                    <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color:'#64748b' }}>{lbl}</label>
+                    <input type="date" name={name} required value={formData[name]} onChange={handleFormChange}
+                      className="input-field w-full py-2.5 px-4 text-sm" style={{ color:'#e2eaf5' }} />
+                  </div>
+                ))}
               </div>
-
-              {/* Last Used Date */}
               <div>
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Last Used Date (Optional)</label>
-                <input
-                  type="date"
-                  name="last_used_date"
-                  value={formData.last_used_date}
-                  onChange={handleFormChange}
-                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl py-2.5 px-4 text-slate-200 focus:outline-none focus:border-indigo-500 text-sm transition-colors"
-                />
-                <span className="text-[10px] text-slate-500 mt-1 block">Used to determine "Unused" status (30+ days idle).</span>
+                <label className="text-xs font-semibold uppercase tracking-wider block mb-1.5" style={{ color:'#64748b' }}>
+                  Last Used Date <span className="normal-case font-normal" style={{ color:'#334155' }}>(optional)</span>
+                </label>
+                <input type="date" name="last_used_date" value={formData.last_used_date} onChange={handleFormChange}
+                  className="input-field w-full py-2.5 px-4 text-sm" style={{ color:'#e2eaf5' }} />
               </div>
-
-              {/* Active Toggle */}
-              <div className="flex items-center gap-2 py-1">
-                <input
-                  type="checkbox"
-                  name="is_active"
-                  id="is_active"
-                  checked={formData.is_active}
-                  onChange={handleFormChange}
-                  className="h-4 w-4 rounded bg-slate-950 border-slate-800 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0 focus:outline-none"
-                />
-                <label htmlFor="is_active" className="text-xs font-semibold text-slate-350 cursor-pointer">
-                  Active subscription (include in aggregations and reminders)
+              <div className="flex items-center gap-2.5 py-1">
+                <input type="checkbox" name="is_active" id="is_active" checked={formData.is_active} onChange={handleFormChange}
+                  className="h-4 w-4 rounded" style={{ accentColor:'#7c3aed' }} />
+                <label htmlFor="is_active" className="text-xs font-medium cursor-pointer" style={{ color:'#94a3b8' }}>
+                  Active — include in spend totals and reminders
                 </label>
               </div>
-
-              {/* Submit Buttons */}
-              <div className="flex justify-end gap-3 border-t border-slate-800/80 pt-4 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700/80 text-slate-350 hover:text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-                >
+              <div className="flex justify-end gap-3 pt-4" style={{ borderTop:'1px solid rgba(30,58,95,0.5)' }}>
+                <button type="button" onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors"
+                  style={{ background:'rgba(30,58,95,0.4)', color:'#94a3b8', border:'1px solid rgba(30,58,95,0.6)' }}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={formSubmitting}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md shadow-indigo-600/10 active:scale-[0.98] disabled:opacity-50 cursor-pointer"
-                >
-                  {formSubmitting ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <>
-                      <Check className="h-3.5 w-3.5" />
-                      Save Changes
-                    </>
-                  )}
+                <button type="submit" disabled={formSubmitting}
+                  className="btn-primary flex items-center gap-1.5 px-5 py-2.5 text-xs disabled:opacity-50">
+                  {formSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Check className="h-3.5 w-3.5" /> Save</>}
                 </button>
               </div>
             </form>
@@ -532,26 +366,28 @@ const Subscriptions = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirm */}
       {isDeleteConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center">
-            <AlertTriangle className="h-10 w-10 text-rose-500 mx-auto mb-4" />
-            <h3 className="text-base font-bold text-white mb-2">Delete Subscription?</h3>
-            <p className="text-slate-400 text-xs mb-6">
-              Are you sure you want to delete <span className="font-bold text-white">"{subToDelete?.name}"</span>? This operation cannot be undone.
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ background:'rgba(8,12,20,0.85)', backdropFilter:'blur(12px)' }}>
+          <div className="w-full max-w-sm glass-card p-7 shadow-2xl text-center animate-fade-scale"
+            style={{ boxShadow:'0 0 60px rgba(244,63,94,0.1), 0 24px 48px rgba(0,0,0,0.5)' }}>
+            <div className="p-4 rounded-2xl inline-block mb-4" style={{ background:'rgba(244,63,94,0.1)' }}>
+              <AlertTriangle className="h-8 w-8" style={{ color:'#f43f5e' }} />
+            </div>
+            <h3 className="text-base font-bold mb-2" style={{ color:'#e2eaf5' }}>Delete Subscription?</h3>
+            <p className="text-sm mb-6" style={{ color:'#64748b' }}>
+              This will permanently delete <span className="font-bold" style={{ color:'#e2eaf5' }}>"{subToDelete?.name}"</span>. This cannot be undone.
             </p>
             <div className="flex justify-center gap-3">
-              <button
-                onClick={() => setIsDeleteConfirmOpen(false)}
-                className="px-4 py-2 bg-slate-850 hover:bg-slate-850/80 text-slate-350 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition-colors cursor-pointer"
-              >
+              <button onClick={() => setIsDeleteConfirmOpen(false)}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold transition-colors"
+                style={{ background:'rgba(30,58,95,0.4)', color:'#94a3b8', border:'1px solid rgba(30,58,95,0.6)' }}>
                 Cancel
               </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-rose-600/10 active:scale-[0.98] transition-all cursor-pointer"
-              >
+              <button onClick={handleDelete}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white transition-all"
+                style={{ background:'linear-gradient(135deg,#f43f5e,#e11d48)', boxShadow:'0 4px 16px rgba(244,63,94,0.3)' }}>
                 Delete
               </button>
             </div>
