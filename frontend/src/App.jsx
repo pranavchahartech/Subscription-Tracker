@@ -7,11 +7,14 @@ import Dashboard from './pages/Dashboard';
 import Subscriptions from './pages/Subscriptions';
 import Reminders from './pages/Reminders';
 import Navigation from './components/Navigation';
+import DemoBanner from './components/DemoBanner';
+import ToastContainer from './components/ToastContainer';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
   const { user, loading } = useAuth();
-  const [authScreen, setAuthScreen] = useState('login'); // 'login' | 'register'
+  const [authScreen, setAuthScreen] = useState('login'); // 'login' | 'register' | 'forgot-password'
   const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard' | 'subscriptions' | 'reminders'
 
   if (loading) {
@@ -28,16 +31,32 @@ function AppContent() {
   // Not authenticated screens
   if (!user) {
     if (authScreen === 'register') {
-      return <Register onNavigateToLogin={() => setAuthScreen('login')} />;
+      return (
+        <>
+          <DemoBanner />
+          <Register onNavigateToLogin={() => setAuthScreen('login')} />
+          <ToastContainer />
+        </>
+      );
     }
     if (authScreen === 'forgot-password') {
-      return <ForgotPassword onNavigateToLogin={() => setAuthScreen('login')} />;
+      return (
+        <>
+          <DemoBanner />
+          <ForgotPassword onNavigateToLogin={() => setAuthScreen('login')} />
+          <ToastContainer />
+        </>
+      );
     }
     return (
-      <Login 
-        onNavigateToRegister={() => setAuthScreen('register')} 
-        onNavigateToForgotPassword={() => setAuthScreen('forgot-password')} 
-      />
+      <>
+        <DemoBanner />
+        <Login 
+          onNavigateToRegister={() => setAuthScreen('register')} 
+          onNavigateToForgotPassword={() => setAuthScreen('forgot-password')} 
+        />
+        <ToastContainer />
+      </>
     );
   }
 
@@ -56,23 +75,29 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
-      {/* Sidebar Navigation */}
-      <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
+    <div className="min-h-screen bg-slate-950 flex flex-col">
+      <DemoBanner />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar Navigation */}
+        <Navigation currentPage={currentPage} setCurrentPage={setCurrentPage} />
 
-      {/* Main Workspace Scroll Panel */}
-      <main className="flex-1 overflow-y-auto h-screen">
-        {renderPage()}
-      </main>
+        {/* Main Workspace Scroll Panel */}
+        <main className="flex-1 overflow-y-auto h-[calc(100vh-2.25rem)]">
+          {renderPage()}
+        </main>
+      </div>
+      <ToastContainer />
     </div>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

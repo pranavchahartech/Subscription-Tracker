@@ -8,6 +8,20 @@ const logger = require('./utils/logger');
 const { startReminderJob } = require('./jobs/reminderJob');
 require('dotenv').config();
 
+// OpenAPI / Swagger — loaded lazily so it never breaks production if yaml is missing
+let swaggerUi, swaggerDocument;
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const yaml = require('js-yaml');
+    swaggerUi = require('swagger-ui-express');
+    swaggerDocument = yaml.load(fs.readFileSync(path.join(__dirname, '../openapi.yaml'), 'utf8'));
+  } catch (e) {
+    logger.warn({ err: e }, 'Could not load OpenAPI spec — /api-docs will be unavailable');
+  }
+}
+
 // Enforce required secrets at boot
 if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET || !process.env.JWT_RESET_SECRET) {
   logger.error('FATAL: JWT_SECRET, JWT_REFRESH_SECRET, and JWT_RESET_SECRET environment variables must all be defined.');
@@ -51,6 +65,15 @@ const authLimiter = rateLimit({
 // Route Handlers
 app.use('/api/auth', authLimiter, require('./routes/auth'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
+
+// Interactive API docs — dev/test only, never in production
+if (process.env.NODE_ENV !== 'production' && swaggerUi && swaggerDocument) {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+    customSiteTitle: 'SubSpace API Docs',
+    customCss: '.swagger-ui .topbar { display: none }',
+  }));
+  logger.info('Swagger UI available at /api-docs');
+}
 
 // Health check with database connectivity ping
 app.get('/health', async (req, res) => {

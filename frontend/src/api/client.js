@@ -8,10 +8,37 @@ const client = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 3000,
+  timeout: 4000,
 });
 
-// Mock State for Seamless Interactive Demo when local backend DB is offline
+// Demo Mode & Error Event Bus
+let demoModeActive = false;
+const demoListeners = new Set();
+const errorListeners = new Set();
+
+export const subscribeDemoMode = (callback) => {
+  demoListeners.add(callback);
+  callback(demoModeActive);
+  return () => demoListeners.delete(callback);
+};
+
+export const subscribeApiError = (callback) => {
+  errorListeners.add(callback);
+  return () => errorListeners.delete(callback);
+};
+
+const notifyDemoMode = (active) => {
+  if (demoModeActive !== active) {
+    demoModeActive = active;
+    demoListeners.forEach(fn => fn(active));
+  }
+};
+
+const notifyApiError = (message) => {
+  errorListeners.forEach(fn => fn(message));
+};
+
+// Mock State for Demo Mode when local backend DB is completely unreachable
 const today = new Date();
 const formatDate = (daysOffset) => {
   const d = new Date(today);
@@ -108,7 +135,6 @@ let mockSubscriptions = [
 
 const calculateSummary = () => {
   const activeSubs = mockSubscriptions.filter(s => s.is_active);
-  
   let monthlyTotal = 0;
   let annualTotal = 0;
   let unusedCount = 0;
@@ -155,34 +181,36 @@ const calculateSummary = () => {
 
 // Response Interceptor for live API / Mock fallback
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Backend answered successfully - exit demo mode if previously active
+    notifyDemoMode(false);
+    return response;
+  },
   async (error) => {
-    // If backend is not connected (Network Error or ECONNREFUSED)
-    if (!error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED' || error.response?.status >= 500) {
+    // Only trigger mock fallback on genuine network-unreachable errors (NO error.response at all, or ERR_NETWORK)
+    const isNetworkError = !error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED' || error.code === 'ERR_CONNECTION_REFUSED';
+
+    if (isNetworkError) {
+      notifyDemoMode(true);
       const url = error.config?.url || '';
       const method = (error.config?.method || 'get').toLowerCase();
 
-      // Auth me
       if (url.includes('/api/auth/me')) {
         return Promise.resolve({ data: mockUser });
       }
-      // Auth budget update
       if (url.includes('/api/auth/budget')) {
         const body = JSON.parse(error.config.data || '{}');
         mockUser.monthly_budget = body.monthly_budget;
         return Promise.resolve({ data: { message: 'Budget updated', user: mockUser } });
       }
-      // Auth login / register
       if (url.includes('/api/auth/login') || url.includes('/api/auth/register')) {
         const body = JSON.parse(error.config.data || '{}');
         if (body.email) mockUser.email = body.email;
         return Promise.resolve({ data: { message: 'Success', user: mockUser } });
       }
-      // Subscriptions summary
       if (url.includes('/api/subscriptions/summary')) {
         return Promise.resolve({ data: calculateSummary() });
       }
-      // Subscriptions list / export
       if (url.includes('/api/subscriptions') && method === 'get') {
         if (url.includes('/export/csv')) {
           const csvHeader = 'Name,Cost,Currency,Billing Cycle,Category,Next Renewal,Status\n';
@@ -191,7 +219,6 @@ client.interceptors.response.use(
         }
         return Promise.resolve({ data: mockSubscriptions });
       }
-      // Add subscription
       if (url.includes('/api/subscriptions') && method === 'post') {
         const body = JSON.parse(error.config.data || '{}');
         const newSub = {
@@ -202,7 +229,6 @@ client.interceptors.response.use(
         mockSubscriptions.unshift(newSub);
         return Promise.resolve({ data: newSub });
       }
-      // Update subscription
       if (url.includes('/api/subscriptions/') && method === 'put') {
         const id = parseInt(url.split('/').pop());
         const body = JSON.parse(error.config.data || '{}');
@@ -210,11 +236,19 @@ client.interceptors.response.use(
         const updated = mockSubscriptions.find(s => s.id === id);
         return Promise.resolve({ data: updated });
       }
-      // Delete subscription
       if (url.includes('/api/subscriptions/') && method === 'delete') {
         const id = parseInt(url.split('/').pop());
         mockSubscriptions = mockSubscriptions.filter(s => s.id !== id);
         return Promise.resolve({ data: { message: 'Deleted successfully' } });
+      }
+    }
+
+    // Real server errors (5xx, 4xx with error.response): notify global toast bus and reject
+    if (error.response) {
+      const msg = error.response.data?.error || `HTTP ${error.response.status} ${error.response.statusText || 'Error'}`;
+      // Do not toast for standard auth check 401
+      if (error.response.status !== 401) {
+        notifyApiError(msg);
       }
     }
 

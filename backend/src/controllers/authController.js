@@ -199,7 +199,7 @@ const getMe = async (req, res) => {
   try {
     const result = await db.query('SELECT id, email, monthly_budget FROM users WHERE id = $1', [req.userId]);
     if (result.rows.length === 0) {
-      return res.status(44).json({ error: 'User not found' });
+      return res.status(404).json({ error: 'User not found' });
     }
     const user = result.rows[0];
     res.json({

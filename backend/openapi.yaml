@@ -1,0 +1,678 @@
+openapi: '3.1.0'
+info:
+  title: SubSpace API
+  version: '1.0.0'
+  description: |
+    REST API for SubSpace — an automated subscription tracking and budget management system.
+    
+    **Authentication:** All `/api/subscriptions` routes and `/api/auth/me`, `/api/auth/budget`
+    require a valid `accessToken` HttpOnly cookie issued at login/register.
+    Token rotation is handled automatically via `/api/auth/refresh`.
+  contact:
+    name: SubSpace Repository
+    url: https://github.com/pranavchahartech/Subscription-Tracker
+
+servers:
+  - url: http://localhost:4000
+    description: Local development server
+
+tags:
+  - name: Auth
+    description: Authentication, session management, and password recovery
+  - name: Subscriptions
+    description: Subscription CRUD, telemetry summary, and CSV export
+
+# ─── Security Scheme ─────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: accessToken
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        monthly_budget:
+          type: number
+          format: float
+          example: 5000.00
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Netflix Premium
+        cost:
+          type: number
+          format: float
+          example: 649.00
+        currency:
+          type: string
+          enum: [INR, USD, EUR, GBP]
+          example: INR
+        billing_cycle:
+          type: string
+          enum: [monthly, annual]
+        category:
+          type: string
+          enum: [Entertainment, Utilities, Software, 'Health & Fitness', Business, Other]
+        start_date:
+          type: string
+          format: date
+        next_renewal:
+          type: string
+          format: date
+        last_used_date:
+          type: string
+          format: date
+          nullable: true
+        is_active:
+          type: boolean
+        status:
+          type: string
+          enum: [Active, Unused, Review, Inactive]
+          description: Derived field — not stored, computed on read
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    SubscriptionInput:
+      type: object
+      required: [name, cost, billing_cycle, start_date, next_renewal]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Netflix Premium
+        cost:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 649.00
+        currency:
+          type: string
+          enum: [INR, USD, EUR, GBP]
+          default: INR
+        billing_cycle:
+          type: string
+          enum: [monthly, annual]
+        category:
+          type: string
+          enum: [Entertainment, Utilities, Software, 'Health & Fitness', Business, Other]
+          default: Other
+        start_date:
+          type: string
+          format: date
+        next_renewal:
+          type: string
+          format: date
+        last_used_date:
+          type: string
+          format: date
+          nullable: true
+        is_active:
+          type: boolean
+          default: true
+
+    DashboardSummary:
+      type: object
+      properties:
+        monthlyTotal:
+          type: number
+          format: float
+          description: Total active monthly spend
+        annualTotal:
+          type: number
+          format: float
+          description: Total projected annual spend
+        monthlyBudget:
+          type: number
+          format: float
+        budgetExceeded:
+          type: boolean
+        unusedCount:
+          type: integer
+          description: Number of subscriptions with no usage in 30+ days
+        reviewCount:
+          type: integer
+          description: Number of subscriptions renewing within 7 days
+        potentialSavingsMonthly:
+          type: number
+          format: float
+        potentialSavingsAnnually:
+          type: number
+          format: float
+        categoryBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              monthlyCost:
+                type: number
+              annualCost:
+                type: number
+              percentage:
+                type: number
+        spendTrends:
+          type: array
+          description: 6-month spend trend data
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+                example: Aug
+              spend:
+                type: number
+              budget:
+                type: number
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Validation failed
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+# ─── Auth Routes ─────────────────────────────────────────────────────────────
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user account
+      description: Creates a new user and sets `accessToken` + `refreshToken` HttpOnly cookies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  minLength: 8
+                  example: securepass123
+      responses:
+        '201':
+          description: User registered successfully
+          headers:
+            Set-Cookie:
+              description: HttpOnly accessToken and refreshToken cookies
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Email already registered or validation error
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Error'
+                  - $ref: '#/components/schemas/ValidationError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate and start a session
+      description: Validates credentials and sets `accessToken` + `refreshToken` HttpOnly cookies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid credentials or validation error
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Error'
+                  - $ref: '#/components/schemas/ValidationError'
+        '500':
+          description: Server error
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate refresh token and issue new access token
+      description: |
+        Reads the `refreshToken` HttpOnly cookie, validates it against the DB,
+        revokes the old token (rotation), and issues a new token pair.
+      responses:
+        '200':
+          description: Session refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Refresh token missing, invalid, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Invalidate session and clear cookies
+      description: Revokes the refresh token in the DB and clears both HttpOnly cookies.
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get authenticated user profile
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/budget:
+    put:
+      tags: [Auth]
+      summary: Update the authenticated user's monthly budget cap
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [monthly_budget]
+              properties:
+                monthly_budget:
+                  type: number
+                  format: float
+                  minimum: 0
+                  example: 5000.00
+      responses:
+        '200':
+          description: Budget updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Not authenticated
+
+  /api/auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Initiate password recovery
+      description: |
+        Sends a 6-digit OTP to the registered email address if it exists.
+        Always returns the same generic response to prevent email enumeration.
+        Rate limited to 3 requests per 15 minutes per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Generic response (sent whether or not email exists)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: If the email exists, a verification code has been sent.
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/verify-reset-code:
+    post:
+      tags: [Auth]
+      summary: Verify the 6-digit OTP from the reset email
+      description: Returns a short-lived `resetToken` JWT on success, used in the next step.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                  pattern: '^\d{6}$'
+                  example: '482910'
+      responses:
+        '200':
+          description: Code verified — returns a short-lived reset token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  resetToken:
+                    type: string
+                    description: Short-lived JWT (10 min) for the reset step
+        '400':
+          description: Invalid/expired code or too many attempts
+
+  /api/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Set a new password using the verified reset token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, resetToken, newPassword]
+              properties:
+                email:
+                  type: string
+                  format: email
+                resetToken:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password updated and all active sessions revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Invalid/expired token or mismatch
+
+# ─── Subscriptions Routes ────────────────────────────────────────────────────
+  /api/subscriptions/summary:
+    get:
+      tags: [Subscriptions]
+      summary: Get aggregated dashboard telemetry
+      description: |
+        Returns monthly/annual totals, budget vs spend comparison, unused count,
+        potential savings, category breakdown, and 6-month spend trend data.
+        **Requires authentication.**
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Dashboard summary data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+        '401':
+          description: Not authenticated
+
+  /api/subscriptions/export/csv:
+    get:
+      tags: [Subscriptions]
+      summary: Download all subscriptions as a CSV file
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: CSV file download
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="subspace-subscriptions.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+        '401':
+          description: Not authenticated
+
+  /api/subscriptions:
+    get:
+      tags: [Subscriptions]
+      summary: List all subscriptions for the authenticated user
+      description: Returns non-deleted subscriptions ordered by next renewal date. Each item includes a computed `status` field.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Array of subscription objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        '401':
+          description: Not authenticated
+
+    post:
+      tags: [Subscriptions]
+      summary: Create a new subscription
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionInput'
+      responses:
+        '201':
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Not authenticated
+
+  /api/subscriptions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Subscription UUID
+
+    put:
+      tags: [Subscriptions]
+      summary: Update an existing subscription
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionInput'
+      responses:
+        '200':
+          description: Updated subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Validation error
+        '401':
+          description: Not authenticated
+        '404':
+          description: Subscription not found or does not belong to user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [Subscriptions]
+      summary: Soft-delete a subscription
+      description: Sets `deleted_at` timestamp — the record is preserved in the database for auditing.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Subscription soft-deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  id:
+                    type: string
+                    format: uuid
+        '401':
+          description: Not authenticated
+        '404':
+          description: Subscription not found or does not belong to user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
