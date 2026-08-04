@@ -1,16 +1,23 @@
 const jwt = require('jsonwebtoken');
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
+  if (!process.env.JWT_SECRET) {
+    throw new Error('FATAL: JWT_SECRET environment variable is missing.');
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret', (err, decoded) => {
+  // Extract from httpOnly cookie or Authorization header
+  let token = req.cookies?.accessToken;
+  if (!token && req.headers['authorization']) {
+    token = req.headers['authorization'].split(' ')[1];
+  }
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+      return res.status(401).json({ error: 'Invalid or expired access token' });
     }
     req.userId = decoded.userId;
     next();

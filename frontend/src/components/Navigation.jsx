@@ -1,6 +1,7 @@
-import React from 'react';
-import { LayoutDashboard, CreditCard, Bell, LogOut, Wallet, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LayoutDashboard, CreditCard, Bell, LogOut, Wallet, Zap, AlertTriangle, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import client from '../api/client';
 
 const navItems = [
   { id: 'dashboard',     name: 'Dashboard',     icon: LayoutDashboard },
@@ -10,25 +11,94 @@ const navItems = [
 
 const Navigation = ({ currentPage, setCurrentPage }) => {
   const { user, logout } = useAuth();
+  const [notifications, setNotifications] = useState([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const initial = user?.email?.charAt(0).toUpperCase() || 'U';
 
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await client.get('/api/subscriptions');
+        const alertSubs = res.data.filter(s => s.status === 'Review' || s.status === 'Unused');
+        setNotifications(alertSubs);
+      } catch {
+        // Silently catch notification fetch errors
+      }
+    };
+
+    if (user) {
+      fetchNotifications();
+    }
+  }, [user]);
+
   return (
-    <aside className="w-64 flex-shrink-0 flex flex-col justify-between h-screen sticky top-0 border-r"
+    <aside className="w-64 flex-shrink-0 flex flex-col justify-between h-screen sticky top-0 border-r relative z-30"
       style={{ background: 'linear-gradient(180deg,#0d1526 0%,#080c14 100%)', borderColor: 'rgba(30,58,95,0.55)' }}>
 
-      {/* Logo */}
+      {/* Logo & Header */}
       <div className="p-6">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="relative">
-            <div className="p-2.5 rounded-xl animate-glow-pulse"
-              style={{ background: 'linear-gradient(135deg,#7c3aed,#06b6d4)' }}>
-              <Wallet className="h-5 w-5 text-white" />
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="p-2.5 rounded-xl animate-glow-pulse"
+                style={{ background: 'linear-gradient(135deg,#7c3aed,#06b6d4)' }}>
+                <Wallet className="h-5 w-5 text-white" />
+              </div>
+              <Zap className="h-3 w-3 text-amber-400 absolute -top-1 -right-1 animate-bounce" />
             </div>
-            <Zap className="h-3 w-3 text-amber-400 absolute -top-1 -right-1 animate-bounce" />
+            <div>
+              <h1 className="text-lg font-bold gradient-text tracking-tight">SubSpace</h1>
+              <span className="text-[10px] font-mono tracking-widest" style={{ color:'#334155' }}>TRACKER v2.0</span>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold gradient-text tracking-tight">SubSpace</h1>
-            <span className="text-[10px] font-mono tracking-widest" style={{ color:'#334155' }}>TRACKER v2.0</span>
+
+          {/* In-App Notification Bell */}
+          <div className="relative">
+            <button
+              onClick={() => setIsNotifOpen(!isNotifOpen)}
+              className="p-2 rounded-xl transition-all relative"
+              style={{ background: 'rgba(30,58,95,0.4)', border: '1px solid rgba(30,58,95,0.6)', color: notifications.length > 0 ? '#f59e0b' : '#64748b' }}
+              title="In-App Notifications">
+              <Bell className="h-4 w-4" />
+              {notifications.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white animate-badge-pop"
+                  style={{ background: 'linear-gradient(135deg,#f43f5e,#e11d48)' }}>
+                  {notifications.length}
+                </span>
+              )}
+            </button>
+
+            {/* Notification Dropdown */}
+            {isNotifOpen && (
+              <div className="absolute left-0 mt-3 w-64 glass-card p-4 shadow-2xl z-50 animate-fade-scale"
+                style={{ background: '#0d1526', borderColor: 'rgba(124,58,237,0.4)' }}>
+                <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: '1px solid rgba(30,58,95,0.5)' }}>
+                  <span className="text-xs font-bold" style={{ color: '#e2eaf5' }}>Notifications ({notifications.length})</span>
+                  <button onClick={() => setIsNotifOpen(false)} className="text-slate-400 hover:text-white">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {notifications.length > 0 ? (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {notifications.map(sub => (
+                      <div key={sub.id} 
+                        onClick={() => { setCurrentPage('reminders'); setIsNotifOpen(false); }}
+                        className="p-2 rounded-lg cursor-pointer transition-colors hover:bg-white/5 flex items-start gap-2 text-xs">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold" style={{ color: '#e2eaf5' }}>{sub.name}</p>
+                          <p className="text-[10px]" style={{ color: '#94a3b8' }}>
+                            {sub.status === 'Review' ? 'Renewing soon (within 7 days)' : 'Unused for 30+ days'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-center py-3" style={{ color: '#64748b' }}>No pending alerts</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -42,9 +112,7 @@ const Navigation = ({ currentPage, setCurrentPage }) => {
                 key={item.id}
                 onClick={() => setCurrentPage(item.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 group relative animate-slide-up ${
-                  isActive
-                    ? 'text-white'
-                    : 'text-slate-400 hover:text-white'
+                  isActive ? 'text-white' : 'text-slate-400 hover:text-white'
                 }`}
                 style={isActive ? {
                   background: 'linear-gradient(135deg,rgba(124,58,237,0.25),rgba(6,182,212,0.15))',
@@ -52,7 +120,6 @@ const Navigation = ({ currentPage, setCurrentPage }) => {
                   border: '1px solid rgba(124,58,237,0.4)',
                 } : {}}
               >
-                {/* Active glow dot */}
                 {isActive && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-r-full"
                     style={{ background: 'linear-gradient(180deg,#7c3aed,#06b6d4)' }} />
@@ -71,7 +138,7 @@ const Navigation = ({ currentPage, setCurrentPage }) => {
         </nav>
       </div>
 
-      {/* User + Logout */}
+      {/* User & Sign Out */}
       <div className="p-5 border-t" style={{ borderColor: 'rgba(30,58,95,0.55)' }}>
         <div className="flex items-center gap-3 mb-4 p-3 rounded-xl"
           style={{ background: 'rgba(13,21,38,0.6)', border: '1px solid rgba(30,58,95,0.4)' }}>
@@ -81,7 +148,9 @@ const Navigation = ({ currentPage, setCurrentPage }) => {
           </div>
           <div className="overflow-hidden flex-1 min-w-0">
             <p className="text-xs font-semibold truncate" style={{ color: '#e2eaf5' }}>{user?.email}</p>
-            <p className="text-[10px] font-mono" style={{ color: '#334155' }}>Pro Account</p>
+            <p className="text-[10px] font-mono" style={{ color: '#334155' }}>
+              {user?.monthly_budget > 0 ? `Cap: ₹${user.monthly_budget}` : 'Pro Account'}
+            </p>
           </div>
         </div>
 

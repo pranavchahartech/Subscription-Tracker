@@ -3,15 +3,15 @@ services:
     image: postgres:15
     container_name: subspace-postgres
     environment:
-      POSTGRES_DB: subscriptions
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: ${POSTGRES_DB:-subscriptions}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d subscriptions"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-subscriptions}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,14 +22,15 @@ services:
     ports:
       - "4000:4000"
     environment:
-      DATABASE_URL: postgres://admin:secret@postgres:5432/subscriptions
-      JWT_SECRET: your_jwt_secret
-      JWT_RESET_SECRET: your_jwt_reset_secret
-      SMTP_HOST: smtp.gmail.com
-      SMTP_PORT: 587
-      SMTP_USER: your_smtp_user@gmail.com
-      SMTP_PASS: your_smtp_password
-      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL:-postgres://admin:secret@postgres:5432/subscriptions}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_RESET_SECRET: ${JWT_RESET_SECRET}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      PORT: ${PORT:-4000}
     depends_on:
       postgres:
         condition: service_healthy

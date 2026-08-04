@@ -8,7 +8,6 @@ const getSubscriptionStatus = (sub) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // If last_used_date is set, compare it. Otherwise compare start_date.
   const referenceDate = sub.last_used_date ? new Date(sub.last_used_date) : new Date(sub.start_date);
   referenceDate.setHours(0, 0, 0, 0);
 
@@ -21,8 +20,7 @@ const getSubscriptionStatus = (sub) => {
   nextRenewal.setHours(0, 0, 0, 0);
   const diffTime = nextRenewal - today;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
-  // Review window is renewal in the next 7 days
+
   const isReview = diffDays >= 0 && diffDays <= 7;
 
   if (isUnused) return 'Unused';
@@ -33,13 +31,13 @@ const getSubscriptionStatus = (sub) => {
 const getSubscriptions = async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY next_renewal ASC',
+      'SELECT * FROM subscriptions WHERE user_id = $1 AND deleted_at IS NULL ORDER BY next_renewal ASC',
       [req.userId]
     );
 
-    // Enrich subscriptions with dynamic status
     const subscriptions = result.rows.map(sub => ({
       ...sub,
+      cost: parseFloat(sub.cost),
       status: getSubscriptionStatus(sub)
     }));
 
@@ -53,10 +51,6 @@ const getSubscriptions = async (req, res) => {
 const createSubscription = async (req, res) => {
   const { name, cost, currency, billing_cycle, category, start_date, next_renewal, last_used_date, is_active } = req.body;
 
-  if (!name || cost === undefined || !billing_cycle || !start_date || !next_renewal) {
-    return res.status(400).json({ error: 'Missing required subscription fields' });
-  }
-
   try {
     const result = await db.query(
       `INSERT INTO subscriptions 
@@ -69,7 +63,7 @@ const createSubscription = async (req, res) => {
         parseFloat(cost),
         currency || 'INR',
         billing_cycle,
-        category || 'Uncategorized',
+        category || 'Other',
         start_date,
         next_renewal,
         last_used_date || null,
@@ -80,6 +74,7 @@ const createSubscription = async (req, res) => {
     const sub = result.rows[0];
     res.status(201).json({
       ...sub,
+      cost: parseFloat(sub.cost),
       status: getSubscriptionStatus(sub)
     });
   } catch (err) {
@@ -92,14 +87,9 @@ const updateSubscription = async (req, res) => {
   const { id } = req.params;
   const { name, cost, currency, billing_cycle, category, start_date, next_renewal, last_used_date, is_active } = req.body;
 
-  if (!name || cost === undefined || !billing_cycle || !start_date || !next_renewal) {
-    return res.status(400).json({ error: 'Missing required subscription fields' });
-  }
-
   try {
-    // Check ownership
     const checkOwnership = await db.query(
-      'SELECT id FROM subscriptions WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM subscriptions WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [id, req.userId]
     );
 
@@ -110,14 +100,14 @@ const updateSubscription = async (req, res) => {
     const result = await db.query(
       `UPDATE subscriptions 
        SET name = $1, cost = $2, currency = $3, billing_cycle = $4, category = $5, start_date = $6, next_renewal = $7, last_used_date = $8, is_active = $9
-       WHERE id = $10 AND user_id = $11
+       WHERE id = $10 AND user_id = $11 AND deleted_at IS NULL
        RETURNING *`,
       [
         name.trim(),
         parseFloat(cost),
         currency || 'INR',
         billing_cycle,
-        category || 'Uncategorized',
+        category || 'Other',
         start_date,
         next_renewal,
         last_used_date || null,
@@ -130,6 +120,7 @@ const updateSubscription = async (req, res) => {
     const sub = result.rows[0];
     res.json({
       ...sub,
+      cost: parseFloat(sub.cost),
       status: getSubscriptionStatus(sub)
     });
   } catch (err) {
@@ -142,8 +133,9 @@ const deleteSubscription = async (req, res) => {
   const { id } = req.params;
 
   try {
+    // Soft delete by setting deleted_at timestamp
     const result = await db.query(
-      'DELETE FROM subscriptions WHERE id = $1 AND user_id = $2 RETURNING id',
+      'UPDATE subscriptions SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING id',
       [id, req.userId]
     );
 
@@ -151,7 +143,7 @@ const deleteSubscription = async (req, res) => {
       return res.status(404).json({ error: 'Subscription not found or unauthorized' });
     }
 
-    res.json({ message: 'Subscription deleted successfully', id: result.rows[0].id });
+    res.json({ message: 'Subscription deleted successfully (soft-deleted)', id: result.rows[0].id });
   } catch (err) {
     logger.error({ err }, 'Error deleting subscription');
     res.status(500).json({ error: 'Server error while deleting subscription' });
@@ -160,22 +152,30 @@ const deleteSubscription = async (req, res) => {
 
 const getSummary = async (req, res) => {
   try {
-    // Fetch all active and inactive subscriptions to compile full statistics
+    // Fetch active user subscriptions (not soft-deleted)
     const result = await db.query(
-      'SELECT * FROM subscriptions WHERE user_id = $1',
+      'SELECT * FROM subscriptions WHERE user_id = $1 AND deleted_at IS NULL',
       [req.userId]
     );
+
+    // Fetch user monthly budget
+    const userResult = await db.query(
+      'SELECT monthly_budget FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const monthlyBudget = userResult.rows.length > 0 ? parseFloat(userResult.rows[0].monthly_budget) : 0;
 
     let monthlyTotal = 0;
     let annualTotal = 0;
     let unusedCount = 0;
+    let reviewCount = 0;
     let potentialSavingsMonthly = 0;
     let potentialSavingsAnnually = 0;
 
     const categoryMap = {};
 
     result.rows.forEach(sub => {
-      if (!sub.is_active) return; // Only aggregate active subscriptions
+      if (!sub.is_active) return;
 
       const cost = parseFloat(sub.cost);
       const isMonthly = sub.billing_cycle === 'monthly';
@@ -185,16 +185,16 @@ const getSummary = async (req, res) => {
       monthlyTotal += mCost;
       annualTotal += aCost;
 
-      // Check if unused
       const status = getSubscriptionStatus(sub);
       if (status === 'Unused') {
         unusedCount++;
         potentialSavingsMonthly += mCost;
         potentialSavingsAnnually += aCost;
+      } else if (status === 'Review') {
+        reviewCount++;
       }
 
-      // Category breakdown
-      const category = sub.category || 'Uncategorized';
+      const category = sub.category || 'Other';
       if (!categoryMap[category]) {
         categoryMap[category] = { monthly: 0, annual: 0 };
       }
@@ -211,13 +211,42 @@ const getSummary = async (req, res) => {
         : 0
     }));
 
+    // Generate 6-Month Spend Trend Data
+    const months = [];
+    const today = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+      
+      // Calculate active monthly spend for that month based on subscription start dates
+      let historicalSpend = 0;
+      result.rows.forEach(sub => {
+        if (!sub.is_active) return;
+        const startDate = new Date(sub.start_date);
+        if (startDate <= new Date(d.getFullYear(), d.getMonth() + 1, 0)) {
+          const cost = parseFloat(sub.cost);
+          historicalSpend += sub.billing_cycle === 'monthly' ? cost : cost / 12;
+        }
+      });
+
+      months.push({
+        month: monthLabel,
+        spend: parseFloat(historicalSpend.toFixed(2)),
+        budget: monthlyBudget
+      });
+    }
+
     res.json({
       monthlyTotal: parseFloat(monthlyTotal.toFixed(2)),
       annualTotal: parseFloat(annualTotal.toFixed(2)),
+      monthlyBudget,
+      budgetExceeded: monthlyBudget > 0 && monthlyTotal > monthlyBudget,
       unusedCount,
+      reviewCount,
       potentialSavingsMonthly: parseFloat(potentialSavingsMonthly.toFixed(2)),
       potentialSavingsAnnually: parseFloat(potentialSavingsAnnually.toFixed(2)),
-      categoryBreakdown
+      categoryBreakdown,
+      spendTrends: months
     });
   } catch (err) {
     logger.error({ err }, 'Error generating summary');
@@ -228,7 +257,7 @@ const getSummary = async (req, res) => {
 const exportCsv = async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT * FROM subscriptions WHERE user_id = $1 ORDER BY next_renewal ASC',
+      'SELECT * FROM subscriptions WHERE user_id = $1 AND deleted_at IS NULL ORDER BY next_renewal ASC',
       [req.userId]
     );
     const headers = ['Name','Cost','Currency','Billing Cycle','Category','Start Date','Next Renewal','Last Used','Active','Status'];
@@ -260,5 +289,6 @@ module.exports = {
   updateSubscription,
   deleteSubscription,
   getSummary,
-  exportCsv
+  exportCsv,
+  getSubscriptionStatus
 };
