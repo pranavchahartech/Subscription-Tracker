@@ -260,6 +260,12 @@ const exportCsv = async (req, res) => {
       'SELECT * FROM subscriptions WHERE user_id = $1 AND deleted_at IS NULL ORDER BY next_renewal ASC',
       [req.userId]
     );
+    // PostgreSQL DATE columns come back as JS Date objects — convert safely
+    const toDateStr = (val) => {
+      if (!val) return '';
+      if (val instanceof Date) return val.toISOString().split('T')[0];
+      return String(val).split('T')[0];
+    };
     const headers = ['Name','Cost','Currency','Billing Cycle','Category','Start Date','Next Renewal','Last Used','Active','Status'];
     const rows = result.rows.map(sub => [
       `"${sub.name.replace(/"/g,'""')}"`,
@@ -267,9 +273,9 @@ const exportCsv = async (req, res) => {
       sub.currency,
       sub.billing_cycle,
       sub.category,
-      sub.start_date ? sub.start_date.split('T')[0] : '',
-      sub.next_renewal ? sub.next_renewal.split('T')[0] : '',
-      sub.last_used_date ? sub.last_used_date.split('T')[0] : '',
+      toDateStr(sub.start_date),
+      toDateStr(sub.next_renewal),
+      toDateStr(sub.last_used_date),
       sub.is_active ? 'Yes' : 'No',
       getSubscriptionStatus(sub)
     ].join(','));
@@ -282,6 +288,7 @@ const exportCsv = async (req, res) => {
     res.status(500).json({ error: 'Server error while exporting CSV' });
   }
 };
+
 
 module.exports = {
   getSubscriptions,
