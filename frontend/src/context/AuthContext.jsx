@@ -13,13 +13,19 @@ export const AuthProvider = ({ children }) => {
       try {
         const res = await client.get('/api/auth/me');
         setUser(res.data);
-      } catch {
+      } catch (err) {
+        // If we got a real response (backend is UP but session is invalid/expired),
+        // try to refresh first, then show login. Do NOT fall back to a fake user —
+        // that would bypass auth and break every authenticated API call.
         try {
           const refreshRes = await client.post('/api/auth/refresh');
           setUser(refreshRes.data.user);
         } catch {
-          // Fallback to default user for seamless experience
-          setUser({ id: 1, email: 'demo@subspace.io', monthly_budget: 5000 });
+          // If we reach here the session is truly gone.
+          // client.js interceptor already handles the genuine network-unreachable
+          // case by returning mock data, so in that case /api/auth/me succeeded
+          // above and we never hit this block. Here we set null → login page shows.
+          setUser(null);
         }
       } finally {
         setLoading(false);
@@ -28,6 +34,7 @@ export const AuthProvider = ({ children }) => {
 
     checkSession();
   }, []);
+
 
   const login = async (email, password) => {
     try {
