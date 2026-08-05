@@ -40,20 +40,75 @@ const seedDb = async () => {
     };
 
     const subscriptions = [
-      { name: 'Netflix Premium', cost: 649.00, currency: 'INR', billing_cycle: 'monthly', category: 'Entertainment', start_date: getPastDate(45), next_renewal: getFutureDate(5), last_used_date: getPastDate(2) },
-      { name: 'Spotify Individual', cost: 119.00, currency: 'INR', billing_cycle: 'monthly', category: 'Entertainment', start_date: getPastDate(60), next_renewal: getFutureDate(2), last_used_date: getPastDate(35) },
-      { name: 'AWS Cloud Hosting', cost: 2450.00, currency: 'INR', billing_cycle: 'monthly', category: 'Software', start_date: getPastDate(90), next_renewal: getFutureDate(12), last_used_date: getPastDate(1) },
-      { name: 'Gold Gym Membership', cost: 9999.00, currency: 'INR', billing_cycle: 'annual', category: 'Health & Fitness', start_date: getPastDate(180), next_renewal: getFutureDate(185), last_used_date: getPastDate(45) },
-      { name: 'Airtel Fiber Broadband', cost: 943.00, currency: 'INR', billing_cycle: 'monthly', category: 'Utilities', start_date: getPastDate(120), next_renewal: getFutureDate(8), last_used_date: getPastDate(1) },
-      { name: 'Slack Pro Workspace', cost: 500.00, currency: 'INR', billing_cycle: 'monthly', category: 'Business', start_date: getPastDate(15), next_renewal: getFutureDate(15), last_used_date: getPastDate(3) }
+      // ── ACTIVE: used recently (2 days ago), renewal 20 days away ─────────────
+      {
+        name: 'Netflix Premium 4K',
+        cost: 649.00, currency: 'INR', billing_cycle: 'monthly',
+        category: 'Entertainment',
+        start_date: getPastDate(30),
+        next_renewal: getFutureDate(20),   // 20 days away  → not Review
+        last_used_date: getPastDate(2),    // 2 days ago    → not Unused
+        is_active: true,                   // → STATUS: ACTIVE ✅
+      },
+      // ── ACTIVE: everyday tool, renewal well ahead ────────────────────────────
+      {
+        name: 'AWS Cloud Hosting',
+        cost: 2450.00, currency: 'INR', billing_cycle: 'monthly',
+        category: 'Software',
+        start_date: getPastDate(25),
+        next_renewal: getFutureDate(25),   // 25 days away  → not Review
+        last_used_date: getPastDate(1),    // yesterday     → not Unused
+        is_active: true,                   // → STATUS: ACTIVE ✅
+      },
+      // ── REVIEW: renewing very soon (4 days), used recently ───────────────────
+      {
+        name: 'Airtel Fiber Broadband',
+        cost: 943.00, currency: 'INR', billing_cycle: 'monthly',
+        category: 'Utilities',
+        start_date: getPastDate(28),
+        next_renewal: getFutureDate(4),    // 4 days away   → within 7-day window
+        last_used_date: getPastDate(3),    // 3 days ago    → not Unused
+        is_active: true,                   // → STATUS: REVIEW ⚠️
+      },
+      // ── REVIEW: renewing in 2 days (will email reminder tonight) ─────────────
+      {
+        name: 'ChatGPT Plus',
+        cost: 1650.00, currency: 'INR', billing_cycle: 'monthly',
+        category: 'Software',
+        start_date: getPastDate(28),
+        next_renewal: getFutureDate(2),    // 2 days away   → within 7-day window
+        last_used_date: getPastDate(1),    // yesterday     → not Unused
+        is_active: true,                   // → STATUS: REVIEW ⚠️
+      },
+      // ── UNUSED: last used 40 days ago → idle for over a month ────────────────
+      {
+        name: 'Gold Gym Membership',
+        cost: 9999.00, currency: 'INR', billing_cycle: 'annual',
+        category: 'Health & Fitness',
+        start_date: getPastDate(60),
+        next_renewal: getFutureDate(305),  // annual, far away
+        last_used_date: getPastDate(40),   // 40 days ago   → exceeds 30-day idle threshold
+        is_active: true,                   // → STATUS: UNUSED 🟡
+      },
+      // ── INACTIVE: manually turned off by user ────────────────────────────────
+      {
+        name: 'Figma Professional',
+        cost: 1050.00, currency: 'INR', billing_cycle: 'monthly',
+        category: 'Software',
+        start_date: getPastDate(20),
+        next_renewal: getFutureDate(10),
+        last_used_date: getPastDate(15),
+        is_active: false,                  // → STATUS: INACTIVE 🔴
+      },
     ];
 
     for (const sub of subscriptions) {
       await pool.query(
         `INSERT INTO subscriptions 
           (user_id, name, cost, currency, billing_cycle, category, start_date, next_renewal, last_used_date, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE)`,
-        [userId, sub.name, sub.cost, sub.currency, sub.billing_cycle, sub.category, sub.start_date, sub.next_renewal, sub.last_used_date]
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [userId, sub.name, sub.cost, sub.currency, sub.billing_cycle, sub.category,
+         sub.start_date, sub.next_renewal, sub.last_used_date, sub.is_active]
       );
     }
     console.log('Database auto-seeded successfully with demo@subspace.com / password123');
