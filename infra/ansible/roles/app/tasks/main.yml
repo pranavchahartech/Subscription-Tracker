@@ -30,12 +30,12 @@
   ansible.builtin.command:
     cmd: docker compose -f docker-compose.prod.yml pull
     chdir: "{{ app_dir }}"
-  register: compose_pull
-  changed_when: "'Pulling' in compose_pull.stderr or 'Downloaded' in compose_pull.stderr"
+  register: app_compose_pull
+  changed_when: "'Pulling' in app_compose_pull.stderr or 'Downloaded' in app_compose_pull.stderr"
 
 - name: Start SubSpace containers with Docker Compose
   ansible.builtin.command:
     cmd: docker compose -f docker-compose.prod.yml up -d --remove-orphans
     chdir: "{{ app_dir }}"
-  register: compose_up
-  changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+  register: app_compose_up
+  changed_when: "'Started' in app_compose_up.stderr or 'Created' in app_compose_up.stderr or 'Recreated' in app_compose_up.stderr"
