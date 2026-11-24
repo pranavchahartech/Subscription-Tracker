@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// Use VITE_API_URL when defined (including "" for relative same-origin URLs behind nginx).
+// Only fall back to localhost:4000 when VITE_API_URL is unset (local Vite dev server).
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
 const client = axios.create({
   baseURL: API_URL,

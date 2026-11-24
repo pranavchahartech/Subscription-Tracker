@@ -1,0 +1,19 @@
+# Apache2 configuration for Nagios 4 Web UI (http://<ops-host-ip>/nagios4)
+# Enforces HTTP Basic authentication using /etc/nagios4/htpasswd.users
+
+ScriptAlias /cgi-bin/nagios4 /usr/lib/cgi-bin/nagios4
+ScriptAlias /nagios4/cgi-bin /usr/lib/cgi-bin/nagios4
+
+Alias /nagios4/stylesheets /etc/nagios4/stylesheets
+Alias /nagios4 /usr/share/nagios4/htdocs
+
+<DirectoryMatch (/usr/share/nagios4/htdocs|/usr/lib/cgi-bin/nagios4|/etc/nagios4/stylesheets)>
+    Options FollowSymLinks
+    DirectoryIndex index.php index.html
+    AllowOverride AuthConfig
+
+    AuthType Basic
+    AuthName "SubSpace Nagios Monitoring"
+    AuthUserFile /etc/nagios4/htpasswd.users
+    Require valid-user
+</DirectoryMatch>

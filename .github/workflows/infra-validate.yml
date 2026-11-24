@@ -1,0 +1,86 @@
+name: Validate Infrastructure Code
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/infra-validate.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/infra-validate.yml'
+  workflow_dispatch:
+
+jobs:
+  # ─── Terraform Format & Validate ────────────────────────────────────────────
+  terraform-validate:
+    name: Terraform fmt & validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Check formatting and validate configuration
+        run: |
+          if [ -d infra/terraform ] && compgen -G "infra/terraform/*.tf" > /dev/null; then
+            terraform -chdir=infra/terraform fmt -check -recursive
+            terraform -chdir=infra/terraform init -backend=false
+            terraform -chdir=infra/terraform validate
+          else
+            echo "No Terraform files found under infra/terraform yet — skipping."
+          fi
+
+  # ─── Ansible Lint ───────────────────────────────────────────────────────────
+  ansible-lint:
+    name: Ansible Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ansible-lint
+        run: pip install --no-cache-dir ansible-lint
+
+      - name: Run ansible-lint
+        run: |
+          if [ -d infra/ansible ] && find infra/ansible -maxdepth 3 -name "*.yml" -o -name "*.yaml" | grep -q .; then
+            ansible-lint infra/ansible/
+          else
+            echo "No Ansible YAML files found under infra/ansible yet — skipping."
+          fi
+
+  # ─── Puppet Parser Validate ─────────────────────────────────────────────────
+  puppet-validate:
+    name: Puppet parser validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Puppet parser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y puppet
+
+      - name: Validate Puppet manifests
+        run: |
+          if [ -d infra/puppet ] && find infra/puppet -name "*.pp" | grep -q .; then
+            find infra/puppet -name "*.pp" -print0 | xargs -0 -n1 puppet parser validate
+          else
+            echo "No Puppet manifests found under infra/puppet yet — skipping."
+          fi

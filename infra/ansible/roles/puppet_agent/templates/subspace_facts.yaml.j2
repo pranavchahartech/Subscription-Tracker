@@ -1,0 +1,4 @@
+# Custom Facter facts written by Ansible so Puppet configures NRPE allowed_hosts cleanly
+ops_host_private_ip: "{{ hostvars[groups['ops_host'][0]]['private_ip'] | default('127.0.0.1') }}"
+app_dir: "{{ app_dir }}"
+app_user: "{{ app_user }}"

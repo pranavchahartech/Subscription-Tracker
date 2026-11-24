@@ -31,6 +31,11 @@ if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET || !process.env.J
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Trust one reverse-proxy hop (nginx) in production so express-rate-limit reads X-Forwarded-For cleanly
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Security headers
 app.use(helmet());
 

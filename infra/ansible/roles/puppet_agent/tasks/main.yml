@@ -1,0 +1,56 @@
+---
+# Puppet Agent role (app-host): installs Puppet 8 Agent from official noble apt repo
+
+- name: Download official Puppet 8 apt release package for Ubuntu 24.04 (noble)
+  ansible.builtin.get_url:
+    url: https://apt.puppet.com/puppet8-release-noble.deb
+    dest: /tmp/puppet8-release-noble.deb
+    mode: "0644"
+
+- name: Install Puppet 8 apt release package
+  ansible.builtin.apt:
+    deb: /tmp/puppet8-release-noble.deb
+
+- name: Install Puppet Agent package
+  ansible.builtin.apt:
+    update_cache: true
+    name: puppet-agent
+    state: present
+
+- name: Ensure Facter external facts directory exists
+  ansible.builtin.file:
+    path: /etc/facter/facts.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write SubSpace external facts for Puppet
+  ansible.builtin.template:
+    src: subspace_facts.yaml.j2
+    dest: /etc/facter/facts.d/subspace.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure Puppet Agent puppet.conf
+  ansible.builtin.template:
+    src: puppet.conf.j2
+    dest: /etc/puppetlabs/puppet/puppet.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Puppet Agent
+
+- name: Ensure Puppet Agent service is enabled and running
+  ansible.builtin.systemd_service:
+    name: puppet
+    state: started
+    enabled: true
+
+- name: Run Puppet Agent once to sign certificate and apply baseline catalog
+  ansible.builtin.command:
+    cmd: /opt/puppetlabs/bin/puppet agent --test
+  register: puppet_agent_run
+  changed_when: puppet_agent_run.rc == 2
+  failed_when: puppet_agent_run.rc not in [0, 2]

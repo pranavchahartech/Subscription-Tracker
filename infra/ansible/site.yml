@@ -1,0 +1,26 @@
+---
+# Master Ansible playbook for SubSpace AWS infrastructure.
+# Bootstraps both hosts, configures Puppet Server + Nagios on ops-host,
+# and deploys SubSpace + Docker + Puppet Agent + NRPE on app-host.
+
+- name: Configure base packages and host name resolution on all nodes
+  hosts: all
+  become: true
+  roles:
+    - common
+
+- name: Configure Puppet Server and Nagios Core on ops-host
+  hosts: ops_host
+  become: true
+  roles:
+    - puppet_server
+    - nagios
+
+- name: Configure Docker, SubSpace app, Puppet Agent, and NRPE on app-host
+  hosts: app_host
+  become: true
+  roles:
+    - docker
+    - app
+    - puppet_agent
+    - nrpe

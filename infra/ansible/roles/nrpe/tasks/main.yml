@@ -1,0 +1,65 @@
+---
+# NRPE role (app-host): installs nagios-nrpe-server, custom check plugins, and NRPE command definitions
+
+- name: Install NRPE server and standard monitoring plugins
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    name:
+      - nagios-nrpe-server
+      - monitoring-plugins
+    state: present
+
+- name: Allow nagios user to query Docker containers for local health checks
+  ansible.builtin.user:
+    name: nagios
+    groups: docker
+    append: true
+  notify: Restart NRPE
+
+- name: Ensure NRPE drop-in and custom plugin directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/nagios/nrpe.d
+    - /usr/local/lib/nagios/plugins
+
+- name: Install custom NRPE check scripts on app-host
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/lib/nagios/plugins/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - check_memory.sh
+    - check_docker_service.sh
+    - check_postgres_container.sh
+
+- name: Configure /etc/nagios/nrpe.cfg to allow ops-host
+  ansible.builtin.template:
+    src: nrpe.cfg.j2
+    dest: /etc/nagios/nrpe.cfg
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart NRPE
+
+- name: Deploy SubSpace NRPE check command definitions
+  ansible.builtin.template:
+    src: subspace_nrpe.cfg.j2
+    dest: /etc/nagios/nrpe.d/subspace.cfg
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart NRPE
+
+- name: Ensure NRPE service is enabled and running
+  ansible.builtin.systemd_service:
+    name: nagios-nrpe-server
+    state: started
+    enabled: true

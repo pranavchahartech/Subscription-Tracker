@@ -1,0 +1,109 @@
+---
+# Nagios role (ops-host): installs Nagios Core 4 + Apache2 Web UI from Ubuntu 24.04 packages
+
+- name: Install Nagios Core 4, NRPE plugin, monitoring plugins, and Apache2
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    name:
+      - apache2
+      - apache2-utils
+      - monitoring-plugins
+      - nagios-nrpe-plugin
+      - nagios4
+      - nagios4-cgi
+    state: present
+
+- name: Enable Apache CGI and rewrite modules for Nagios4 web UI
+  ansible.builtin.command:
+    cmd: "a2enmod {{ item }}"
+    creates: "/etc/apache2/mods-enabled/{{ item }}.load"
+  loop:
+    - cgi
+    - rewrite
+  notify: Restart Apache2
+
+- name: Create Nagios web UI htpasswd user
+  ansible.builtin.command:
+    cmd: "htpasswd -bc /etc/nagios4/htpasswd.users {{ nagios_admin_user }} {{ vault_nagios_admin_password }}"
+  changed_when: true
+  no_log: true
+
+- name: Set secure permissions on Nagios htpasswd file
+  ansible.builtin.file:
+    path: /etc/nagios4/htpasswd.users
+    owner: root
+    group: www-data
+    mode: "0640"
+
+- name: Configure Apache Basic Auth for Nagios4 web UI
+  ansible.builtin.template:
+    src: nagios4-cgi.conf.j2
+    dest: /etc/apache2/conf-available/nagios4-cgi.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Apache2
+
+- name: Enable Nagios4 Apache site configuration
+  ansible.builtin.command:
+    cmd: a2enconf nagios4-cgi
+    creates: /etc/apache2/conf-enabled/nagios4-cgi.conf
+  notify: Restart Apache2
+
+- name: Enable authentication in Nagios CGI configuration
+  ansible.builtin.lineinfile:
+    path: /etc/nagios4/cgi.cfg
+    regexp: '^use_authentication='
+    line: 'use_authentication=1'
+  notify: Restart Nagios4
+
+- name: Grant Nagios admin full CGI permissions
+  ansible.builtin.lineinfile:
+    path: /etc/nagios4/cgi.cfg
+    regexp: "^{{ item }}="
+    line: "{{ item }}={{ nagios_admin_user }}"
+  loop:
+    - authorized_for_system_information
+    - authorized_for_configuration_information
+    - authorized_for_system_commands
+    - authorized_for_all_services
+    - authorized_for_all_hosts
+    - authorized_for_all_service_commands
+    - authorized_for_all_host_commands
+  notify: Restart Nagios4
+
+- name: Ensure Nagios loads custom configurations from /etc/nagios4/conf.d
+  ansible.builtin.lineinfile:
+    path: /etc/nagios4/nagios.cfg
+    regexp: '^#?cfg_dir=/etc/nagios4/conf\.d'
+    line: 'cfg_dir=/etc/nagios4/conf.d'
+  notify: Restart Nagios4
+
+- name: Deploy SubSpace Nagios object configurations to /etc/nagios4/conf.d
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../nagios/{{ item }}"
+    dest: "/etc/nagios4/conf.d/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - commands.cfg
+    - contacts.cfg
+    - hosts.cfg
+    - services.cfg
+  notify: Restart Nagios4
+
+- name: Validate Nagios Core configuration syntax
+  ansible.builtin.command:
+    cmd: nagios4 -v /etc/nagios4/nagios.cfg
+  changed_when: false
+
+- name: Ensure nagios4 and apache2 services are enabled and running
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - nagios4
+    - apache2

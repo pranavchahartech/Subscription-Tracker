@@ -1,0 +1,6 @@
+# NRPE check commands for SubSpace app-host (loaded via include_dir=/etc/nagios/nrpe.d/)
+command[check_load]=/usr/lib/nagios/plugins/check_load -w 4.0,3.0,2.0 -c 6.0,5.0,4.0
+command[check_disk]=/usr/lib/nagios/plugins/check_disk -w 20% -c 10% -p /
+command[check_memory]=/usr/local/lib/nagios/plugins/check_memory.sh -w 80 -c 90
+command[check_docker]=/usr/local/lib/nagios/plugins/check_docker_service.sh
+command[check_postgres]=/usr/local/lib/nagios/plugins/check_postgres_container.sh

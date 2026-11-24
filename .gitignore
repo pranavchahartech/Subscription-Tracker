@@ -26,3 +26,15 @@ Thumbs.db
 
 # Docker
 *.dockerignore
+
+# Terraform
+*.tfstate*
+.terraform/
+terraform.tfvars
+
+# SSH keys & Ansible vault secrets
+*.pem
+.vault_pass*
+*vault_pass*
+vault-password*
+infra/ansible/inventory.ini

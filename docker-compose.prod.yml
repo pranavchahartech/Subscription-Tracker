@@ -1,0 +1,56 @@
+# Production Docker Compose configuration for SubSpace on app-host
+# Pulls pre-built images from GHCR and reads all secrets from a local .env file.
+
+services:
+  # PostgreSQL 15 database — kept strictly on the internal Compose network (no public port 5432)
+  postgres:
+    image: postgres:15
+    container_name: subspace-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-admin} -d $${POSTGRES_DB:-subscriptions}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Node/Express API server — internal only, reached via nginx reverse proxy
+  backend:
+    image: ghcr.io/pranavchahartech/subspace-backend:${IMAGE_TAG:-latest}
+    container_name: subspace-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    expose:
+      - "4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:4000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  # React 19 SPA served by Nginx + reverse proxy for /api and /health
+  frontend:
+    image: ghcr.io/pranavchahartech/subspace-frontend:${IMAGE_TAG:-latest}
+    container_name: subspace-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  # Persistent named volume for PostgreSQL data across container restarts/updates
+  pgdata:

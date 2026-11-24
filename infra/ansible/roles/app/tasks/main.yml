@@ -1,0 +1,41 @@
+---
+# App role: deploys docker-compose.prod.yml and .env to app-host and starts public GHCR containers
+
+- name: Ensure SubSpace application directory exists
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0755"
+
+- name: Copy docker-compose.prod.yml to app-host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../docker-compose.prod.yml"
+    dest: "{{ app_dir }}/docker-compose.prod.yml"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0644"
+
+- name: Render production .env file from Ansible Vault
+  ansible.builtin.template:
+    src: app.env.j2
+    dest: "{{ app_dir }}/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Pull public GHCR images for SubSpace
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.prod.yml pull
+    chdir: "{{ app_dir }}"
+  register: compose_pull
+  changed_when: "'Pulling' in compose_pull.stderr or 'Downloaded' in compose_pull.stderr"
+
+- name: Start SubSpace containers with Docker Compose
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.prod.yml up -d --remove-orphans
+    chdir: "{{ app_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr or 'Recreated' in compose_up.stderr"

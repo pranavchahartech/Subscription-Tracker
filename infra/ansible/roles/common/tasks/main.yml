@@ -1,0 +1,38 @@
+---
+# Common role: base system packages and internal VPC hostname resolution
+
+- name: Update apt package cache and install common utilities
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - jq
+      - lsb-release
+      - unzip
+    state: present
+
+- name: Ensure ops-host and puppet resolve to ops-host private IP in /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '\s+puppet\s+ops-host$'
+    line: "{{ hostvars[groups['ops_host'][0]]['private_ip'] }} puppet ops-host"
+    state: present
+  when:
+    - groups['ops_host'] is defined
+    - groups['ops_host'] | length > 0
+    - hostvars[groups['ops_host'][0]]['private_ip'] is defined
+
+- name: Ensure app-host resolves to app-host private IP in /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '\s+app-host$'
+    line: "{{ hostvars[groups['app_host'][0]]['private_ip'] }} app-host"
+    state: present
+  when:
+    - groups['app_host'] is defined
+    - groups['app_host'] | length > 0
+    - hostvars[groups['app_host'][0]]['private_ip'] is defined

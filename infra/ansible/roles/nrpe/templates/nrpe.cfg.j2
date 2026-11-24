@@ -1,0 +1,14 @@
+# Nagios NRPE Server configuration for app-host (managed consistently by Ansible and Puppet)
+log_facility=daemon
+pid_file=/run/nagios/nrpe.pid
+server_port=5666
+nrpe_user=nagios
+nrpe_group=nagios
+allowed_hosts=127.0.0.1,::1{% if groups['ops_host'] is defined and groups['ops_host'] | length > 0 and hostvars[groups['ops_host'][0]]['private_ip'] is defined %},{{ hostvars[groups['ops_host'][0]]['private_ip'] }}{% endif %}
+
+dont_blame_nrpe=0
+allow_bash_command_substitution=0
+debug=0
+command_timeout=60
+connection_timeout=300
+include_dir=/etc/nagios/nrpe.d/

@@ -1,0 +1,7 @@
+# Puppet 8 Agent configuration (managed by Ansible)
+[main]
+server = {{ puppet_server_hostname }}
+
+[agent]
+certname = {{ puppet_agent_certname }}
+runinterval = 30m

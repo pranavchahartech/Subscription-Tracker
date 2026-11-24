@@ -1,0 +1,14 @@
+---
+# Non-secret shared variables for SubSpace Ansible playbooks.
+# Sensitive values belong in group_vars/all/vault.yml (encrypted with ansible-vault).
+
+app_dir: /opt/subspace
+app_user: ubuntu
+app_image_tag: latest
+cookie_secure: "false"
+
+puppet_server_hostname: puppet
+puppet_agent_certname: app-host
+puppet_server_jvm_heap: 1g
+
+nagios_admin_user: nagiosadmin

@@ -1,0 +1,12 @@
+# Puppet 8 Server configuration (managed by Ansible)
+[main]
+server = {{ puppet_server_hostname }}
+
+[server]
+vardir = /opt/puppetlabs/server/data/puppetserver
+logdir = /var/log/puppetlabs/puppetserver
+rundir = /var/run/puppetlabs/puppetserver
+pidfile = /var/run/puppetlabs/puppetserver/puppetserver.pid
+codedir = /etc/puppetlabs/code
+dns_alt_names = {{ puppet_server_hostname }},ops-host
+autosign = /etc/puppetlabs/puppet/autosign.conf

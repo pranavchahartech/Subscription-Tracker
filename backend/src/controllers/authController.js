@@ -15,11 +15,18 @@ const JWT_RESET_SECRET = process.env.JWT_RESET_SECRET;
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
+// Allow overriding the Secure flag via COOKIE_SECURE (e.g. "false" for plain HTTP EC2 demo).
+// Defaults to current behaviour: true in production, false otherwise.
+const COOKIE_SECURE = process.env.COOKIE_SECURE !== undefined
+  ? process.env.COOKIE_SECURE === 'true'
+  : IS_PROD;
+
 // Cookie Configuration Helpers
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: IS_PROD,
-  sameSite: IS_PROD ? 'none' : 'lax',
+  secure: COOKIE_SECURE,
+  // Browsers reject SameSite=None without Secure=true; use 'lax' for same-origin HTTP behind nginx
+  sameSite: COOKIE_SECURE ? 'none' : 'lax',
   path: '/',
 };
 

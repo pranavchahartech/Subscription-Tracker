@@ -1,0 +1,80 @@
+---
+# Puppet Server role (ops-host): installs Puppet 8 Server from official noble apt repo
+
+- name: Download official Puppet 8 apt release package for Ubuntu 24.04 (noble)
+  ansible.builtin.get_url:
+    url: https://apt.puppet.com/puppet8-release-noble.deb
+    dest: /tmp/puppet8-release-noble.deb
+    mode: "0644"
+
+- name: Install Puppet 8 apt release package
+  ansible.builtin.apt:
+    deb: /tmp/puppet8-release-noble.deb
+
+- name: Install Puppet Server package
+  ansible.builtin.apt:
+    update_cache: true
+    name: puppetserver
+    state: present
+
+- name: Tune Puppet Server JVM heap size for t3.medium
+  ansible.builtin.lineinfile:
+    path: /etc/default/puppetserver
+    regexp: '^JAVA_ARGS='
+    line: 'JAVA_ARGS="-Xms{{ puppet_server_jvm_heap }} -Xmx{{ puppet_server_jvm_heap }} -Djruby.logger.class=com.puppetlabs.jruby_utils.jruby.Slf4jLogger"'
+  notify: Restart Puppet Server
+
+- name: Configure Puppet Server puppet.conf
+  ansible.builtin.template:
+    src: puppet.conf.j2
+    dest: /etc/puppetlabs/puppet/puppet.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Puppet Server
+
+- name: Configure automatic certificate signing for app-host
+  ansible.builtin.copy:
+    content: |
+      {{ puppet_agent_certname }}
+    dest: /etc/puppetlabs/puppet/autosign.conf
+    owner: puppet
+    group: puppet
+    mode: "0644"
+  notify: Restart Puppet Server
+
+- name: Ensure production Puppet environment directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/puppetlabs/code/environments/production/manifests
+    - /etc/puppetlabs/code/environments/production/modules
+
+- name: Deploy Puppet site.pp manifest to Puppet Server
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../puppet/manifests/site.pp"
+    dest: /etc/puppetlabs/code/environments/production/manifests/site.pp
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy Puppet baseline module to Puppet Server
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../puppet/modules/baseline"
+    dest: /etc/puppetlabs/code/environments/production/modules/
+    owner: root
+    group: root
+    mode: preserve
+
+- name: Ensure Puppet Server service is enabled and running
+  ansible.builtin.systemd_service:
+    name: puppetserver
+    state: started
+    enabled: true
+
+- name: Flush handlers so Puppet Server reloads autosign before agents connect
+  ansible.builtin.meta: flush_handlers
